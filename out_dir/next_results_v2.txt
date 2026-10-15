@@ -1,0 +1,76 @@
+======================================================================
+EXPLORATORY VEHICLE-WISE OBD CLASSIFICATION REPORT (v2)
+======================================================================
+Calibration length: 300 rows. Evaluation stride: 10 rows.
+Total rows: 27820 across vehicles [np.int64(0), np.int64(1), np.int64(2), np.int64(3), np.int64(4), np.int64(5), np.int64(6), np.int64(7)]
+  Vehicle 0 (P0403): 5344 rows
+  Vehicle 1 (healthy): 2525 rows
+  Vehicle 2 (P0113+P2562): 5095 rows
+  Vehicle 3 (healthy): 1338 rows
+  Vehicle 4 (P0562): 3568 rows
+  Vehicle 5 (P0107): 4833 rows
+  Vehicle 6 (P0113+P0234): 910 rows
+  Vehicle 7 (healthy): 4207 rows
+
+======================================================================
+1. CALIBRATION CHECK (Window=30 rows)
+======================================================================
+            calib    features       model balanced_acc   F1_faulty         AUC
+             none all sensors    Majority        0.500       0.831       0.500
+             none all sensors Softmax-Reg        0.248       0.352       0.147
+             none all sensors     ANN-MLP  0.318±0.020 0.428±0.029 0.240±0.015
+             none  no ambient    Majority        0.500       0.831       0.500
+             none  no ambient Softmax-Reg        0.277       0.477       0.143
+             none  no ambient     ANN-MLP  0.304±0.029 0.552±0.043 0.174±0.036
+         first300 all sensors    Majority        0.500       0.831       0.500
+         first300 all sensors Softmax-Reg        0.478       0.586       0.419
+         first300 all sensors     ANN-MLP  0.436±0.017 0.535±0.025 0.372±0.051
+         first300  no ambient    Majority        0.500       0.831       0.500
+         first300  no ambient Softmax-Reg        0.556       0.679       0.542
+         first300  no ambient     ANN-MLP  0.518±0.012 0.671±0.017 0.477±0.019
+full (optimistic) all sensors    Majority        0.500       0.831       0.500
+full (optimistic) all sensors Softmax-Reg        0.461       0.625       0.383
+full (optimistic) all sensors     ANN-MLP  0.507±0.016 0.700±0.008 0.469±0.037
+full (optimistic)  no ambient    Majority        0.500       0.831       0.500
+full (optimistic)  no ambient Softmax-Reg        0.610       0.756       0.589
+full (optimistic)  no ambient     ANN-MLP  0.636±0.009 0.797±0.010 0.656±0.025
+
+Best deployable config: first300 / no ambient / Softmax-Reg
+  Balanced Accuracy: 0.556, F1: 0.679, AUC: 0.542
+
+Per-vehicle accuracy comparison [Deployable: first300 vs Full (Optimistic)]:
+ vehicle      family  acc_first300  acc_full_optimistic
+       0       P0403         0.164                0.769
+       1     healthy         0.860                0.972
+       2 P0113+P2562         0.619                0.850
+       3     healthy         0.847                0.443
+       4       P0562         0.709                0.929
+       5       P0107         0.994                0.428
+       6 P0113+P0234         0.966                0.787
+       7     healthy         0.163                0.203
+
+======================================================================
+2. WINDOW SWEEP (first300, no ambient)
+======================================================================
+ window       model balanced_acc   F1_faulty         AUC  windows_count
+     30 Softmax-Reg        0.556       0.679       0.542           2762
+     30     ANN-MLP  0.518±0.012 0.671±0.017 0.477±0.019           2762
+     60 Softmax-Reg        0.608       0.730       0.583           2738
+     60     ANN-MLP  0.525±0.009 0.697±0.005 0.508±0.028           2738
+    120 Softmax-Reg        0.650       0.775       0.618           2690
+    120     ANN-MLP  0.561±0.012 0.736±0.010 0.528±0.020           2690
+
+======================================================================
+3. SENSITIVITY RUN: REMOVING VEHICLE 3 (Unconfirmed Healthy)
+======================================================================
+          dataset       model balanced_acc   F1_faulty         AUC  windows_count
+Without Vehicle 3 Softmax-Reg        0.456       0.669       0.442           2631
+Without Vehicle 3     ANN-MLP  0.333±0.013 0.644±0.018 0.272±0.072           2631
+
+======================================================================
+NOTES ON METHODOLOGY & EXPLORATORY FRAMING:
+ - 'full' calibration normalises using full vehicle data (including future and faulty rows); labelled optimistic.
+ - 'first300' calibration uses only the first 300 rows per car. Windows overlapping this calibration
+   window are retained in evaluation, which is a minor optimism in deployment.
+ - LOVO guarantees no vehicle is shared between training and testing sets.
+======================================================================

@@ -1,0 +1,89 @@
+===========================================================================
+FROZEN RIGOROUS VEHICLE-WISE OBD CLASSIFICATION REPORT (v3)
+===========================================================================
+Calibration threshold: 300 rows. Stride: 10 rows.
+Evaluation policy: Held-out vehicles scored ONLY on windows with start >= 300.
+Training vehicles retain all windows (from row 0).
+Total dataset: 27820 rows across 8 vehicles:
+  Vehicle 0 (P0403): 5344 rows (post-cal eval rows: 5044)
+  Vehicle 1 (healthy): 2525 rows (post-cal eval rows: 2225)
+  Vehicle 2 (P0113+P2562): 5095 rows (post-cal eval rows: 4795)
+  Vehicle 3 (healthy): 1338 rows (post-cal eval rows: 1038)
+  Vehicle 4 (P0562): 3568 rows (post-cal eval rows: 3268)
+  Vehicle 5 (P0107): 4833 rows (post-cal eval rows: 4533)
+  Vehicle 6 (P0113+P0234): 910 rows (post-cal eval rows: 610)
+  Vehicle 7 (healthy): 4207 rows (post-cal eval rows: 3907)
+
+===========================================================================
+1. CALIBRATION CHECK (Window=30 rows, scored only on start >= 300)
+===========================================================================
+            calib    features       model balanced_acc   F1_faulty         AUC
+             none all sensors    Majority        0.500       0.836       0.500
+             none all sensors Softmax-Reg        0.236       0.360       0.136
+             none all sensors     ANN-MLP  0.323±0.020 0.435±0.028 0.243±0.016
+             none  no ambient    Majority        0.500       0.836       0.500
+             none  no ambient Softmax-Reg        0.265       0.471       0.130
+             none  no ambient     ANN-MLP  0.292±0.028 0.548±0.042 0.156±0.035
+         first300 all sensors    Majority        0.500       0.836       0.500
+         first300 all sensors Softmax-Reg        0.465       0.564       0.399
+         first300 all sensors     ANN-MLP  0.425±0.017 0.511±0.028 0.363±0.054
+         first300  no ambient    Majority        0.500       0.836       0.500
+         first300  no ambient Softmax-Reg        0.545       0.663       0.525
+         first300  no ambient     ANN-MLP  0.509±0.013 0.657±0.019 0.463±0.020
+full (optimistic) all sensors    Majority        0.500       0.836       0.500
+full (optimistic) all sensors Softmax-Reg        0.458       0.626       0.386
+full (optimistic) all sensors     ANN-MLP  0.506±0.014 0.708±0.007 0.477±0.039
+full (optimistic)  no ambient    Majority        0.500       0.836       0.500
+full (optimistic)  no ambient Softmax-Reg        0.598       0.755       0.581
+full (optimistic)  no ambient     ANN-MLP  0.627±0.009 0.801±0.010 0.648±0.026
+
+===========================================================================
+2. FROZEN CONFIGURATION: WINDOW SWEEP (first300 calibration, no ambient sensors)
+   Pre-declared: Softmax regression is the primary deployable model;
+   ANN-MLP (5 seeds) is reported side-by-side. Evaluated on start >= 300.
+===========================================================================
+ window       model balanced_acc   F1_faulty         AUC  eval_windows  total_windows
+     30    Majority        0.500       0.836       0.500          2522           2762
+     30 Softmax-Reg        0.545       0.663       0.525          2522           2762
+     30     ANN-MLP  0.509±0.013 0.657±0.019 0.463±0.020          2522           2762
+     60    Majority        0.500       0.837       0.500          2498           2738
+     60 Softmax-Reg        0.594       0.718       0.563          2498           2738
+     60     ANN-MLP  0.509±0.011 0.685±0.005 0.490±0.028          2498           2738
+    120    Majority        0.500       0.838       0.500          2450           2690
+    120 Softmax-Reg        0.637       0.768       0.592          2450           2690
+    120     ANN-MLP  0.540±0.014 0.723±0.011 0.501±0.021          2450           2690
+
+===========================================================================
+3. PER-VEHICLE ACCURACY ACROSS WINDOW LENGTHS
+   (Frozen config: Softmax-Reg / first300 / no ambient; windows with start >= 300)
+   Also shows full (optimistic) w=30 for comparison.
+===========================================================================
+ vehicle      family  acc_w30  acc_w60  acc_w120  full_opt_w30
+       0       P0403    0.114    0.168     0.156         0.755
+       1     healthy    0.900    0.848     0.948         0.968
+       2 P0113+P2562    0.595    0.726     0.951         0.851
+       3     healthy    0.931    0.980     0.913         0.317
+       4       P0562    0.701    0.826     0.898         0.926
+       5       P0107    0.993    0.996     1.000         0.419
+       6 P0113+P0234    1.000    1.000     1.000         1.000
+       7     healthy    0.157    0.223     0.222         0.209
+
+===========================================================================
+4. SENSITIVITY RUN: REMOVING VEHICLE 3 (Unconfirmed Healthy)
+   Frozen config (first300 / no ambient) tested across 30, 60, 120 without Vehicle 3
+===========================================================================
+ window       model balanced_acc   F1_faulty         AUC  eval_windows
+     30 Softmax-Reg        0.443       0.651       0.426          2421
+     30     ANN-MLP  0.314±0.015 0.626±0.021 0.248±0.070          2421
+     60 Softmax-Reg        0.491       0.708       0.483          2400
+     60     ANN-MLP  0.353±0.018 0.682±0.022 0.317±0.112          2400
+    120 Softmax-Reg        0.491       0.735       0.446          2358
+    120     ANN-MLP  0.365±0.012 0.707±0.014 0.316±0.113          2358
+
+===========================================================================
+METHODOLOGY SUMMARY:
+ - Zero-leakage causal evaluation: calibration window (rows 0-300) is excluded from
+   test scoring for all held-out vehicles, eliminating calibration overlap bias.
+ - Training folds retain all rows (0 to end) to maximize training density.
+ - Frozen models: Softmax-Reg (linear baseline) + MLP (64, 32) across 5 seeds.
+===========================================================================
