@@ -16,6 +16,61 @@ OPTIONAL = ["ambient_pressure", "ambient_temperature"]
 FEATURES = ["rms", "peak_amplitude", "crest_factor", "dominant_frequency_hz"]
 
 
+def recording_quality(frame: pd.DataFrame) -> dict:
+    """Describe validated input without assuming physical units or filling gaps."""
+    steps = np.diff(frame.time.to_numpy(dtype=float))
+    return {
+        "readings": len(frame),
+        "duration_seconds": float(frame.time.iloc[-1] - frame.time.iloc[0]),
+        "median_interval_seconds": float(np.median(steps)) if len(steps) else None,
+        "gaps_over_0_1_seconds": int((steps > .1).sum()),
+        "constant_signals": [c for c in REQUIRED[1:] if frame[c].nunique() == 1],
+    }
+
+
+def analysis_summary(rows: pd.DataFrame, filename: str, model_hash: str) -> dict:
+    available = rows.prediction_available.fillna(False).astype(bool)
+    flagged = available & rows.status.eq("anomaly_detected")
+    scores = rows.loc[available, "anomaly_score"].dropna()
+    return {
+        "recording": filename,
+        "model_sha256": model_hash,
+        "readings": len(rows),
+        "available_readings": int(available.sum()),
+        "flagged_readings": int(flagged.sum()),
+        "flagged_fraction_of_available": float(flagged.sum() / available.sum()) if available.any() else None,
+        "peak_anomaly_score": float(scores.max()) if len(scores) else None,
+        "status": "anomaly_detected" if flagged.any() else (
+            "no_anomaly_detected" if available.any() else "insufficient_history"),
+        "alert_intervals": alert_intervals(rows).to_dict(orient="records"),
+        "interpretation": "Sensor disagreement, not a probability or component diagnosis. No anomaly detected does not establish engine health.",
+    }
+
+
+def inspection_guidance(rows: pd.DataFrame, synthetic: bool = False) -> dict:
+    """Translate existing alerts into review guidance, never a fault probability."""
+    available = rows.prediction_available.fillna(False).astype(bool)
+    flagged = available & rows.status.eq("anomaly_detected")
+    count, alerts = int(available.sum()), int(flagged.sum())
+    if synthetic:
+        title = "Demo only — no engine inspection decision"
+        message = "This is the supplied synthetic recording. Its alerts only demonstrate the analysis workflow."
+    elif not count:
+        title = "Unable to assess — more usable data needed"
+        message = "No readings had enough history for prediction. Upload a longer continuous recording."
+    elif alerts:
+        title = "Inspection recommended — review sensor alerts"
+        message = "Unusual sensor relationships were detected. Verify the recording and have the flagged behaviour reviewed; a component fault is not confirmed."
+    else:
+        title = "No alert-based inspection trigger"
+        message = "No alerts were found in the analyzed readings. This model can miss faults and cannot establish that the engine needs no inspection."
+    return {"title": title, "message": message, "synthetic_demo": synthetic,
+            "available_readings": count, "flagged_readings": alerts,
+            "unavailable_readings": len(rows) - count,
+            "alert_percentage": 100 * alerts / count if count else None,
+            "fault_risk_percentage": None}
+
+
 def read_telemetry(content: bytes) -> pd.DataFrame:
     try:
         frame = pd.read_csv(io.BytesIO(content), encoding="utf-8-sig")

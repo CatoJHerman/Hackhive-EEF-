@@ -1,5 +1,6 @@
 """Recording-level evaluation of a normal-only fitted residual detector."""
 import json
+import hashlib
 from pathlib import Path
 import joblib
 import numpy as np
@@ -48,6 +49,11 @@ def main():
     out.mkdir(parents=True)
     held.to_csv(out / "held_out_predictions.csv", index=False)
     joblib.dump(bundle, out / "residual_model.joblib")
+    (out / "model_manifest.json").write_text(json.dumps({
+        "model_sha256": hashlib.sha256((out / "residual_model.joblib").read_bytes()).hexdigest(),
+        "provenance": "Locally rebuilt from LiU training data; not the frozen official-test artifact.",
+        "prepared_csv_sha256": plan["prepared_csv_sha256"],
+    }, indent=2) + "\n")
     (out / "validation_report.json").write_text(json.dumps(report, indent=2) + "\n")
     print("POOLED", json.dumps(report["pooled"]), flush=True)
 

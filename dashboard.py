@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import io
 import hashlib
+import os
 from pathlib import Path
 
 import joblib
@@ -15,12 +16,14 @@ import streamlit as st
 from scipy.signal import stft
 
 from audio_processing import iter_windows, load_audio
-from dashboard_logic import FEATURES, OPTIONAL, REQUIRED, alert_intervals, read_telemetry
+from audio_baseline import compare_idle
+from dashboard_logic import (FEATURES, OPTIONAL, REQUIRED, alert_intervals,
+                             read_telemetry, recording_quality, analysis_summary, inspection_guidance)
 from features import extract_features, frequency_spectrum
 from predict import predict_recording
 
 ROOT = Path(__file__).resolve().parent
-MODEL = ROOT / "outputs/liu_residuals/residual_model.joblib"
+MODEL = Path(os.environ.get("ENGINE_MODEL_PATH", str(ROOT / "outputs/liu_residuals/residual_model.joblib")))
 BASELINE = ROOT / "baselines/normal_idle_features_1s.csv"
 BLUE, ORANGE, RED, GREY = "#2794ec", "#f5a23c", "#e75b68", "#8692a5"
 BG, PANEL, TEXT = "#0d1423", "#172237", "#eaf2ff"
@@ -63,11 +66,21 @@ def chart(fig):
     st.plotly_chart(fig, width="stretch", config={"displaylogo": False})
 
 
+def model_identity():
+    manifest = MODEL.with_name("model_manifest.json")
+    official = json.loads((ROOT / "reports/official_test.json").read_text())
+    if manifest.is_file():
+        identity = json.loads(manifest.read_text())
+        if identity["model_sha256"] != official["model_sha256"]:
+            return identity["model_sha256"], "Locally rebuilt model · official benchmark does not apply"
+    return official["model_sha256"], "Frozen model · official benchmark artifact"
+
+
 @st.cache_resource(show_spinner="Loading frozen model…")
 def load_model(path: str, expected_hash: str, file_stamp: tuple):
     content = Path(path).read_bytes()
     if hashlib.sha256(content).hexdigest() != expected_hash:
-        raise ValueError("Model does not match the frozen artifact in reports/official_test.json. Obtain the verified model from the team.")
+        raise ValueError("Model checksum does not match its manifest or official report. Restore the matching model artifact.")
     return joblib.load(io.BytesIO(content))
 
 
@@ -82,7 +95,14 @@ def telemetry():
     with st.expander("Required CSV columns and scale", expanded=False):
         st.code(", ".join(REQUIRED), language="text")
         st.write("Keep the original numeric scale and exact column names. The three pressure/airflow targets must be positive. Optional ambient readings are shown when present. Engine speed is in dataset units; its physical unit is unverified.")
+        st.download_button("Download CSV column template", ",".join(REQUIRED) + "\n",
+                           file_name="telemetry_template.csv", mime="text/csv")
     upload = st.file_uploader("Telemetry CSV", type=["csv"], key="telemetry_upload")
+    demo = ROOT / "demo_samples/synthetic_telemetry_demo.csv"
+    if demo.is_file():
+        st.download_button("Download demo telemetry CSV", demo.read_bytes(),
+                           file_name=demo.name, mime="text/csv")
+        st.caption("Synthetic 60-second sample for testing uploads and charts. Values are illustrative, not verified LiU measurements; model alerts on this sample do not validate fault detection.")
     if upload is None:
         st.info("Upload a CSV recording to see its sensor traces, model estimates and alert intervals.")
         return
@@ -95,12 +115,25 @@ def telemetry():
         st.error(f"CSV incompatible: {exc}")
         return
     st.caption(f"Analysed file: **{upload.name}** · {len(data):,} readings · {data.time.iloc[-1] - data.time.iloc[0]:.2f} seconds")
+    quality = recording_quality(data)
+    with st.expander("Recording quality and input preview"):
+        a, b, c = st.columns(3)
+        a.metric("Validated readings", f"{quality['readings']:,}")
+        interval = quality["median_interval_seconds"]
+        b.metric("Median sample interval", f"{interval:.4f} s" if interval is not None else "—")
+        c.metric("Time gaps > 0.1 s", quality["gaps_over_0_1_seconds"])
+        if quality["gaps_over_0_1_seconds"]:
+            st.warning("Time gaps interrupt model history and can make predictions unavailable.")
+        if quality["constant_signals"]:
+            st.info("Constant signals: " + ", ".join(quality["constant_signals"]) + ". Check that these are expected for this recording.")
+        st.dataframe(data.head(100), hide_index=True, width="stretch")
+        st.caption("Preview shows up to 100 readings. Analysis uses the complete recording.")
     if not MODEL.is_file():
         st.warning("Model unavailable. Place the separately supplied frozen artifact at `outputs/liu_residuals/residual_model.joblib` and restart the dashboard. Predictions and alerts cannot be generated without it.")
         sensor_trends(data, list(REQUIRED[1:]), title="Uploaded sensor readings")
         return
     try:
-        expected_hash = json.loads((ROOT / "reports/official_test.json").read_text())["model_sha256"]
+        expected_hash, provenance = model_identity()
         stat = MODEL.stat()
         rows = analyse_telemetry(upload.getvalue(), str(MODEL), expected_hash,
                                  (stat.st_mtime_ns, stat.st_size))
@@ -108,8 +141,27 @@ def telemetry():
         st.error(f"Model could not analyse this recording: {exc}")
         return
     available = rows.prediction_available.fillna(False).astype(bool)
+    st.info(provenance)
     flagged = available & rows.prediction.eq(1).fillna(False)
     intervals = alert_intervals(rows)
+    synthetic = demo.is_file() and upload.getvalue() == demo.read_bytes()
+    guidance = inspection_guidance(rows, synthetic=synthetic)
+    with st.container(border=True):
+        st.subheader("Does this engine need a check?")
+        if flagged.any() and not synthetic:
+            st.warning(guidance["title"])
+        else:
+            st.info(guidance["title"])
+        st.write(guidance["message"])
+        a, b = st.columns(2)
+        percentage = guidance["alert_percentage"]
+        a.metric("Analyzed readings with alerts", f"{percentage:.1f}%" if percentage is not None else "Unavailable")
+        b.metric("Engine fault risk", "Not established")
+        if percentage is not None:
+            st.progress(percentage / 100)
+        st.caption(f"{guidance['flagged_readings']:,} flagged / {guidance['available_readings']:,} analyzed readings. "
+                   f"{guidance['unavailable_readings']:,} readings could not be assessed and are excluded from this percentage.")
+        st.caption("This percentage measures how often alerts occurred, not the chance of a fault, damage severity, or safety to operate. A reliable fault-risk percentage requires independent validation and probability calibration.")
     cols = st.columns(4)
     cols[0].metric("Readings", f"{len(data):,}")
     cols[1].metric("Duration", f"{data.time.iloc[-1] - data.time.iloc[0]:.1f} s")
@@ -155,6 +207,12 @@ def telemetry():
                       file_name=f"{Path(upload.name).stem}_predictions.csv", mime="text/csv")
     b.download_button("Download alert intervals CSV", intervals.to_csv(index=False).encode(),
                       file_name=f"{Path(upload.name).stem}_alert_intervals.csv", mime="text/csv")
+    summary = analysis_summary(rows, upload.name, expected_hash)
+    summary["model_provenance"] = provenance
+    summary["inspection_guidance"] = guidance
+    summary["input_quality"] = quality
+    st.download_button("Download analysis summary JSON", json.dumps(summary, indent=2, allow_nan=False),
+                       file_name=f"{Path(upload.name).stem}_summary.json", mime="application/json")
 
 
 def sensor_trends(data, choices, title):
@@ -172,6 +230,12 @@ def audio():
     st.subheader("Engine audio")
     st.caption("WAV analysis in complete one-second windows. Audio and telemetry recordings are separate and are not synchronized.")
     upload = st.file_uploader("Engine audio WAV", type=["wav"], key="audio_upload")
+    demo_audio = ROOT / "demo_samples/synthetic_audio_comparison.wav"
+    if demo_audio.is_file():
+        st.download_button("Download demo audio WAV", demo_audio.read_bytes(),
+                           file_name=demo_audio.name, mime="audio/wav")
+        st.caption("Synthetic 12-second processing demo: 0–6 seconds within the saved idle feature ranges; "
+                   "6–12 seconds louder and higher-frequency. Not an engine recording or evidence of fault-detection accuracy.")
     if upload is None:
         st.info("Upload a WAV recording to see its waveform, FFT and one-second features.")
         return
@@ -202,6 +266,7 @@ def audio():
     trailing = len(samples) - len(windows) * rate
     if trailing:
         st.caption(f"Incomplete trailing window skipped: {trailing/rate:.3f} seconds.")
+    idle_comparison(frame, upload.name)
     waveform = figure("Complete recording waveform", "Amplitude (loader scale)", 310)
     stride = max(1, len(samples) // 15000)
     line(waveform, np.arange(0, len(samples), stride) / rate, samples[::stride], "Mono waveform", BLUE)
@@ -279,6 +344,52 @@ def reference(frame):
         chart(fig)
 
 
+def idle_comparison(frame, filename):
+    st.subheader("How does this sound compare with idle?")
+    try:
+        content = BASELINE.read_bytes()
+        table, windows, summary = compare_idle(frame, pd.read_csv(io.BytesIO(content)))
+    except (OSError, ValueError, TypeError) as exc:
+        st.warning(f"Idle comparison unavailable: {exc}")
+        return
+    if summary["different_windows"]:
+        st.warning("Differences from the idle baseline found")
+    else:
+        st.info("Selected audio features are within the idle reference range")
+    st.write("This comparison is a diagnostic observation. Acceleration, microphone position, recording gain, "
+             "background noise and engine differences can change the sound without indicating a defect. "
+             "For a meaningful idle comparison, record at idle using comparable equipment and settings.")
+    a, b, c = st.columns(3)
+    a.metric("Windows differing from idle", f"{summary['different_windows_percent']:.1f}%")
+    b.metric("Compared windows", summary["uploaded_windows"])
+    c.metric("Idle reference windows", summary["baseline_windows"])
+    st.caption(f"A window differs if any feature is outside its idle 5th–95th percentile range. "
+               f"Even the saved idle reference has {summary['idle_reference_outside_percent']:.1f}% of windows outside at least one range. "
+               "These are descriptive bands, not validated diagnostic thresholds or a fault-risk percentage.")
+    st.dataframe(table, hide_index=True, width="stretch")
+    feature = st.selectbox("Compare feature against idle range", FEATURES,
+                           format_func=lambda x: x.replace("_", " ").title(), key="idle_comparison_feature")
+    selected = table.set_index("feature").loc[feature]
+    fig = figure("Uploaded audio against idle reference", feature.replace("_", " "))
+    fig.add_hrect(y0=selected.idle_low, y1=selected.idle_high, fillcolor=BLUE,
+                  opacity=.15, line_width=0, annotation_text="Idle central 90% range")
+    fig.add_hline(y=selected.idle_median, line_dash="dash", line_color=GREY)
+    line(fig, frame.start_seconds, frame[feature], "Uploaded feature", ORANGE)
+    chart(fig)
+    with st.expander("Window-by-window differences"):
+        st.dataframe(windows, hide_index=True, width="stretch")
+    summary["baseline_sha256"] = hashlib.sha256(content).hexdigest()
+    summary["recording"] = filename
+    summary["feature_comparison"] = table.to_dict(orient="records")
+    a, b = st.columns(2)
+    a.download_button("Download idle comparison CSV", windows.to_csv(index=False),
+                      file_name=f"{Path(filename).stem}_idle_comparison.csv", mime="text/csv")
+    b.download_button("Download idle summary JSON", json.dumps(summary, indent=2, allow_nan=False),
+                      file_name=f"{Path(filename).stem}_idle_summary.json", mime="application/json")
+    st.caption("Reference: saved normal_idle_features_1s.csv, 44.1 kHz one-second features. "
+               "Raw idle WAVs are unavailable in this checkout, so extraction provenance and independent-session coverage have not been reverified.")
+
+
 def evaluation():
     st.subheader("Model evaluation · historical LiU benchmark")
     try:
@@ -304,9 +415,44 @@ def evaluation():
     st.write(f"Development validation: {development['pooled']['fault_recall']:.1%} faulty-sample detection and {development['pooled']['false_positive_rate']:.1%} normal-sample false flags across held-out recording folds.")
     st.info("Evaluation uses the LiU benchmark, not a fleet of independent vehicles. Fault onset is approximate; fault-recording evaluation excludes 110–130 seconds. Official test data has already been inspected, so further tuning requires fresh independent evaluation.")
     st.caption("Current telemetry model: gradient-boosted regression trees. CNN, SVM and ANN/Softmax approaches remain a brief-alignment gap. No accelerometer/vibration pipeline, live ECU/OBD/CAN connection, validated wear prediction or audio fault classifier is present.")
+    st.subheader("Results by test recording")
+    results = pd.DataFrame(official["recordings"])
+    st.dataframe(results[["recording_id", "fault_recall", "false_positive_rate", "tp", "fn", "fp", "tn"]],
+                 hide_index=True, width="stretch",
+                 column_config={
+                     "fault_recall": st.column_config.NumberColumn("Fault detection fraction", format="%.3f"),
+                     "false_positive_rate": st.column_config.NumberColumn("False alarm fraction", format="%.3f"),
+                 })
+    st.caption("Fractions range from 0 to 1. Blank detection values mean no faulty samples were evaluated in that recording.")
+    st.download_button("Download benchmark results CSV", results.to_csv(index=False),
+                       file_name="historical_benchmark.csv", mime="text/csv")
+
+
+def system_status():
+    with st.sidebar:
+        st.markdown("### Engine signal studio")
+        st.caption("HACKATHON WORKSPACE")
+        st.markdown("#### Model connection")
+        if MODEL.is_file():
+            try:
+                expected, provenance = model_identity()
+                stat = MODEL.stat()
+                load_model(str(MODEL), expected, (stat.st_mtime_ns, stat.st_size))
+                st.success("Model verified and loaded")
+                st.caption(provenance)
+            except Exception as exc:
+                st.error(f"Model unavailable: {exc}")
+        else:
+            st.warning("Frozen model not connected")
+            st.caption("Place the team's residual_model.joblib at the path below, then refresh. You can also set ENGINE_MODEL_PATH before launching.")
+        st.code(str(MODEL), language="text")
+        st.markdown("#### Analysis workflow")
+        st.write("1. Upload a telemetry CSV or audio WAV.\n2. Inspect signals and available alerts.\n3. Export results for your presentation.")
+        st.caption("Telemetry requires the frozen model for predictions. Audio feature analysis works independently.")
 
 
 st.markdown('<div class="eyebrow">ENGINE SIGNAL STUDIO / EXPERIMENTAL</div>', unsafe_allow_html=True)
+system_status()
 st.title("See what the engine signals show.")
 st.markdown('<div class="intro">An experimental engine-signal analysis and consistency-monitoring dashboard. Inspect uploaded telemetry and audio as separate recordings.</div>', unsafe_allow_html=True)
 t1, t2, t3 = st.tabs(["Engine telemetry", "Engine audio", "Model evaluation"])

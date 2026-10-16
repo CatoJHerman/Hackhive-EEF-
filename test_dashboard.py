@@ -6,10 +6,46 @@ import numpy as np
 import pandas as pd
 from scipy.io import wavfile
 from audio_processing import load_audio, iter_windows
-from dashboard_logic import REQUIRED, read_telemetry, alert_intervals
+from dashboard_logic import REQUIRED, read_telemetry, alert_intervals, recording_quality, analysis_summary, inspection_guidance
 
 
 class DashboardChecks(unittest.TestCase):
+    def test_inspection_guidance_does_not_invent_risk(self):
+        rows = pd.DataFrame({"prediction_available": [False, True, True],
+                             "status": ["anomaly_detected", "anomaly_detected", "no_anomaly_detected"]})
+        result = inspection_guidance(rows)
+        self.assertEqual(result["alert_percentage"], 50.)
+        self.assertIsNone(result["fault_risk_percentage"])
+        self.assertIn("Inspection recommended", result["title"])
+        self.assertIn("Demo only", inspection_guidance(rows, synthetic=True)["title"])
+        self.assertIsNone(inspection_guidance(rows.iloc[:1])["alert_percentage"])
+        self.assertIn("Unable to assess", inspection_guidance(rows.iloc[:1])["title"])
+        clear = inspection_guidance(rows.iloc[2:])
+        self.assertEqual(clear["alert_percentage"], 0.)
+        self.assertIn("cannot establish", clear["message"])
+
+    def test_quality_single_reading_and_gaps(self):
+        frame = pd.DataFrame({c: [1., 1., 1.] for c in REQUIRED})
+        frame["time"] = [0., .05, 1.]
+        self.assertEqual(recording_quality(frame)["gaps_over_0_1_seconds"], 1)
+        self.assertEqual(recording_quality(frame)["constant_signals"], REQUIRED[1:])
+        self.assertIsNone(recording_quality(frame.iloc[:1])["median_interval_seconds"])
+
+    def test_summary_excludes_unavailable_readings(self):
+        import json
+        rows = pd.DataFrame({"time": [0., .05, .1],
+                             "prediction_available": [False, True, True],
+                             "status": ["insufficient_history", "anomaly_detected", "no_anomaly_detected"],
+                             "anomaly_score": [np.nan, 2., .5]})
+        summary = analysis_summary(rows, "test.csv", "model-hash")
+        self.assertEqual(summary["flagged_fraction_of_available"], .5)
+        self.assertEqual(summary["peak_anomaly_score"], 2.)
+        self.assertEqual(len(summary["alert_intervals"]), 1)
+        empty = analysis_summary(rows.iloc[:1], "test.csv", "model-hash")
+        self.assertEqual(empty["status"], "insufficient_history")
+        self.assertIsNone(empty["flagged_fraction_of_available"])
+        json.dumps(empty, allow_nan=False)
+
     def test_optional_invalid_values_are_rejected(self):
         data = pd.DataFrame({c: [1., 2.] for c in REQUIRED})
         data["ambient_pressure"] = [100000, "invalid"]
@@ -44,7 +80,7 @@ class DashboardChecks(unittest.TestCase):
         from streamlit.testing.v1 import AppTest
         # Upload widgets are supplied through a mock; all UI/backend code executes.
         root = str(Path(__file__).resolve().parent)
-        for kind in ("csv", "wav", "invalid_csv", "short_wav"):
+        for kind in ("csv", "wav", "idle_wav", "invalid_csv", "short_wav"):
             source = f'''
 import io, runpy
 from unittest.mock import patch
@@ -60,7 +96,8 @@ if kind in ("csv", "invalid_csv"):
     upload = io.BytesIO(frame.to_csv(index=False).encode()); upload.name = "test.csv"
 else:
     upload = io.BytesIO()
-    wavfile.write(upload, 8000, np.zeros(4000 if kind == "short_wav" else 12000, dtype=np.int16))
+    rate = 44100 if kind == "idle_wav" else 8000
+    wavfile.write(upload, rate, np.zeros(4000 if kind == "short_wav" else rate * 2, dtype=np.int16))
     upload.name = "test.wav"
 def uploader(label, **kwargs):
     return upload if ("Telemetry" in label) == (kind in ("csv", "invalid_csv")) else None
@@ -78,6 +115,8 @@ with patch("streamlit.file_uploader", uploader):
             if kind == "wav":
                 app.checkbox[0].check().run(timeout=30)
                 self.assertFalse(list(app.exception), str(list(app.exception)))
+            if kind == "idle_wav":
+                self.assertTrue(any("Differences from the idle baseline found" in e.value for e in app.warning))
 
 
 if __name__ == "__main__":
