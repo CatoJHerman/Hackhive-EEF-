@@ -1,0 +1,141 @@
+{
+  "status": "Development validation only; official test unused.",
+  "pooled": {
+    "tn": 45796,
+    "fp": 5510,
+    "fn": 152935,
+    "tp": 81420,
+    "false_positive_rate": 0.1073948466066347,
+    "fault_recall": 0.34742164664718056,
+    "missed_fault_rate": 0.6525783533528194
+  },
+  "eligible_rows": 285823,
+  "scored_rows": 285661,
+  "folds": [
+    {
+      "recording_id": "wltp_NF",
+      "tn": 30588,
+      "fp": 5460,
+      "fn": 0,
+      "tp": 0,
+      "false_positive_rate": 0.1514647137150466,
+      "fault_recall": null,
+      "missed_fault_rate": null,
+      "fit_rows": 9799,
+      "calibration_rows": 3640,
+      "threshold": 5.665989135401821,
+      "notes": [
+        "Normal-only validation: report false alarms; recall and ROC AUC are unavailable.",
+        "Training normal examples cover only early pre-fault operation; this is an operating-range stress test."
+      ]
+    },
+    {
+      "recording_id": "wltp_f_iml_6mm",
+      "tn": 2158,
+      "fp": 22,
+      "fn": 25523,
+      "tp": 7889,
+      "false_positive_rate": 0.010091743119266056,
+      "fault_recall": 0.23611277385370524,
+      "missed_fault_rate": 0.7638872261462948,
+      "fit_rows": 33387,
+      "calibration_rows": 9360,
+      "threshold": 11.319709910841771,
+      "notes": [
+        "No leak recording remains in training: this tests detection of a fault family unseen during this fold."
+      ]
+    },
+    {
+      "recording_id": "wltp_f_pic_090",
+      "tn": 2160,
+      "fp": 20,
+      "fn": 3209,
+      "tp": 30252,
+      "false_positive_rate": 0.009174311926605505,
+      "fault_recall": 0.9040973073129912,
+      "missed_fault_rate": 0.09590269268700875,
+      "fit_rows": 33387,
+      "calibration_rows": 9360,
+      "threshold": 10.58110512573055,
+      "notes": []
+    },
+    {
+      "recording_id": "wltp_f_pic_110",
+      "tn": 2180,
+      "fp": 0,
+      "fn": 4552,
+      "tp": 28975,
+      "false_positive_rate": 0.0,
+      "fault_recall": 0.864228830494825,
+      "missed_fault_rate": 0.13577116950517493,
+      "fit_rows": 33387,
+      "calibration_rows": 9360,
+      "threshold": 11.393229661932327,
+      "notes": []
+    },
+    {
+      "recording_id": "wltp_f_pim_080",
+      "tn": 2180,
+      "fp": 0,
+      "fn": 22248,
+      "tp": 11272,
+      "false_positive_rate": 0.0,
+      "fault_recall": 0.33627684964200477,
+      "missed_fault_rate": 0.6637231503579952,
+      "fit_rows": 33387,
+      "calibration_rows": 9360,
+      "threshold": 10.641620455959822,
+      "notes": []
+    },
+    {
+      "recording_id": "wltp_f_pim_090",
+      "tn": 2177,
+      "fp": 3,
+      "fn": 31446,
+      "tp": 2071,
+      "false_positive_rate": 0.0013761467889908258,
+      "fault_recall": 0.061789539636602324,
+      "missed_fault_rate": 0.9382104603633977,
+      "fit_rows": 33387,
+      "calibration_rows": 9360,
+      "threshold": 11.14337696594497,
+      "notes": []
+    },
+    {
+      "recording_id": "wltp_f_waf_105",
+      "tn": 2179,
+      "fp": 0,
+      "fn": 33151,
+      "tp": 333,
+      "false_positive_rate": 0.0,
+      "fault_recall": 0.00994504838131645,
+      "missed_fault_rate": 0.9900549516186835,
+      "fit_rows": 33387,
+      "calibration_rows": 9360,
+      "threshold": 10.516897715235803,
+      "notes": []
+    },
+    {
+      "recording_id": "wltp_f_waf_110",
+      "tn": 2174,
+      "fp": 5,
+      "fn": 32806,
+      "tp": 628,
+      "false_positive_rate": 0.002294630564479119,
+      "fault_recall": 0.01878327451097685,
+      "missed_fault_rate": 0.9812167254890232,
+      "fit_rows": 33388,
+      "calibration_rows": 9360,
+      "threshold": 9.91977283940331,
+      "notes": []
+    }
+  ],
+  "mean_recording_false_positive_rate": 0.021800193264298513,
+  "mean_fault_recording_recall": 0.3473190891189174,
+  "limitations": [
+    "Recording-level separation does not establish independence across engines or vehicles.",
+    "Labels around fault onset are provisional; excluded interval is not an official timing bound.",
+    "Ambient conditions can identify recordings; compare the baseline without raw ambient inputs during development."
+  ],
+  "prepared_csv_sha256": "79a989510694883926a81569ab7aaff5c1510dd2747089af1e085ef82312bac0"
+}

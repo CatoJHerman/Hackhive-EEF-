@@ -7,7 +7,7 @@ import zipfile
 import joblib
 import pandas as pd
 from predict import predict_recording
-from train_model import metrics
+from liu_metrics import metrics
 
 
 def main():
