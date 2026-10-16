@@ -1,0 +1,4 @@
+-r requirements-liu.txt
+streamlit>=1.40,<2
+plotly>=5.20,<7
+matplotlib>=3.8,<4
