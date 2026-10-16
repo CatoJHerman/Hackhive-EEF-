@@ -1,0 +1,6 @@
+# Install in the same environment used to train and load the saved baseline.
+numpy>=1.24.1
+scipy>=1.10.0
+pandas==3.0.6
+scikit-learn==1.9.1
+joblib==1.6.0
