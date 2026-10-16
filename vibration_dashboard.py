@@ -1,36 +1,30 @@
-"""Independent vibration panel; no classifier or simulated telemetry is used."""
+"""Upload-driven vibration comparison against the saved reference database."""
 from pathlib import Path
-
 import numpy as np
+import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from scipy.signal import stft
+from vibration_baseline import AXES, read_signal, window_features, compare_reference
 
-from vibration_baseline import (PACKAGE, AXES, read_signal, window_features,
-                                demo_reference, reference_recordings, compare_reference)
+ROOT = Path(__file__).resolve().parent
+BASELINE = ROOT / "baselines/vibration_reference.csv"
 
 
 def vibration_panel():
-    st.subheader("Vibration reference comparison")
-    st.caption("Independent vibration analysis. Audio and telemetry are not synchronized with these recordings.")
-    mode = st.radio("Reference source", ["Upload idle reference", "Simulated normal demo"],
-                    key="vibration_reference_mode")
-    reference_upload = None
-    if mode == "Simulated normal demo":
-        st.warning("Synthetic demonstration only. These normal examples span several operating speeds and are not a verified idle dataset. No fault classification is performed.")
-        samples = sorted((PACKAGE / "samples").glob("*.csv"))
-        if samples:
-            sample = st.selectbox("Download a supplied demo recording", samples, format_func=lambda p: p.stem)
-            st.download_button("Download vibration demo CSV", sample.read_bytes(),
-                               file_name=sample.name, mime="text/csv")
-    else:
-        st.info("Use separate idle recordings with matching sensor axes, units, mounting and acquisition settings. A ZIP can contain several CSV recordings. Reference provenance is user supplied, not independently verified.")
-        reference_upload = st.file_uploader("Idle vibration reference CSV or ZIP", type=["csv", "zip"],
-                                            key="vibration_reference")
-    st.code("time_seconds,sampling_rate_hz,accel_x,accel_y,accel_z", language="text")
+    st.subheader("Vibration analysis")
+    st.caption("Upload a vibration recording. It is compared automatically with the saved baseline.")
+    st.info("Current baseline: three synthetic reference recordings at 1,024 Hz. This tests comparison only; it is not a verified engine-idle baseline.")
     upload = st.file_uploader("Vibration recording CSV", type=["csv"], key="vibration_input")
+    with st.expander("CSV format and test files"):
+        st.code("time_seconds,sampling_rate_hz,accel_x,accel_y,accel_z", language="text")
+        st.caption("Use matching sample rate, axes, units and acquisition settings. At least one complete second is required.")
+        for scenario in ("matching", "changed"):
+            path = ROOT / "demo_samples" / f"synthetic_vibration_{scenario}.csv"
+            if path.is_file():
+                st.download_button(f"Download {scenario} test CSV", path.read_bytes(), file_name=path.name, mime="text/csv")
     if upload is None:
-        st.info("Upload a waveform recording to view its features and compare with the selected reference.")
+        st.info("Upload a CSV to see whether its vibration signatures fall outside the baseline range.")
         return
     try:
         data, rate = read_signal(upload.getvalue())
@@ -38,47 +32,31 @@ def vibration_panel():
     except (ValueError, OSError) as exc:
         st.error(f"Vibration input incompatible: {exc}")
         return
-    st.caption(f"Analysed file: **{upload.name}** · {rate:,} Hz declared and checked against timestamps · "
-               f"{len(data):,} samples · {len(features)} complete one-second windows · "
-               f"{len(data) % rate / rate:.3f} trailing seconds skipped. "
-               "Amplitude units are unverified. Features use mean-centered signals except the reported mean.")
     try:
-        if mode == "Simulated normal demo":
-            reference = demo_reference()
-            source = "Synthetic normal examples (not measured idle)"
-        elif reference_upload is not None:
-            reference = reference_recordings(reference_upload.getvalue(), reference_upload.name)
-            source = f"Uploaded idle reference: {reference_upload.name}"
+        reference = pd.read_csv(BASELINE)
+        result = compare_reference(features, reference)
+        outside = result.comparison.isin(["below reference", "above reference"])
+        comparable = result.comparison.isin(["below reference", "above reference", "within reference"])
+        if outside.any():
+            st.warning("Outside baseline range ? vibration differences detected")
+        elif comparable.all() and len(result) == 24:
+            st.info("Within baseline range ? no outlying signatures detected")
         else:
-            reference = None
-            source = ""
-        if reference is not None:
-            result = compare_reference(features, reference)
-            st.caption(f"Reference source: **{source}** · {len(reference)} reference vector(s). "
-                       "The uploaded CSV and each uploaded reference CSV contribute one median feature vector. "
-                       "Separate files are not necessarily independent engines or sessions.")
-            changed = result.comparison.isin(["below reference", "above reference"])
-            if len(reference) < 3:
-                st.info("One or two reference recordings: feature values are displayed, but there is too little reference spread to state whether the recording differs from an idle range.")
-            else:
-                count = int(changed.sum())
-                available = int(result.comparison.ne("unavailable").sum())
-                if mode == "Simulated normal demo":
-                    st.info(f"Synthetic demo: {count} of {available} available signatures outside its generated reference span.")
-                elif count:
-                    st.warning("Some vibration signatures are outside the supplied idle reference span")
-                else:
-                    st.info("No available recording-level signatures outside the supplied idle reference span")
-                st.metric("Signatures outside observed span", f"{count} / {available}")
-            st.caption("The reference span uses observed minimum–maximum values across separate recordings. "
-                       "It is not a calibrated diagnostic threshold or fault probability. "
-                       "Unavailable features do not establish a match. Operating-condition changes can cause differences, "
-                       "and matching the span does not prove engine health.")
+            st.warning("Unable to fully assess ? insufficient usable baseline or signal features")
+        st.caption("This is a descriptive outlier observation, not a fault diagnosis or a probability. Matching the baseline does not establish engine health.")
+        with st.expander("Comparison details"):
+            st.metric("Signatures outside observed span", f"{int(outside.sum())} / {int(comparable.sum())}")
+            st.caption("Each recording contributes one median feature vector. Comparison uses the observed minimum?maximum across reference recordings; brief changes can be hidden by a recording median.")
             st.dataframe(result, hide_index=True, width="stretch")
-            st.download_button("Download vibration comparison", result.to_csv(index=False),
-                               file_name=f"{Path(upload.name).stem}_vibration_comparison.csv", mime="text/csv")
+            st.download_button("Download vibration comparison", result.to_csv(index=False), file_name=f"{Path(upload.name).stem}_vibration_comparison.csv", mime="text/csv")
     except (ValueError, OSError, KeyError) as exc:
-        st.warning(f"Reference comparison unavailable: {exc}")
+        st.warning(f"Unable to compare with saved baseline: {exc}")
+    with st.expander("Waveform, FFT, STFT and extracted features"):
+        st.caption(f"{rate:,} Hz ? {len(features)} complete seconds ? {len(data) % rate / rate:.3f} trailing seconds skipped. Amplitude units unverified; features are mean-centered except the mean.")
+        signal_details(data, rate, features, upload.name)
+
+
+def signal_details(data, rate, features, filename):
     axis = st.selectbox("Vibration axis", AXES)
     signal = data[axis].to_numpy()
     stride = max(1, int(np.ceil(len(data) / 15000)))
@@ -107,4 +85,4 @@ def vibration_panel():
     st.caption(f"STFT: Hann window, {n} samples, hop {n-n*3//4}, no padding. Waveform may be subsampled for display; feature calculations use all complete-window samples.")
     st.dataframe(features, hide_index=True, width="stretch")
     st.download_button("Download vibration features", features.to_csv(index=False),
-                       file_name=f"{Path(upload.name).stem}_vibration_features.csv", mime="text/csv")
+                       file_name=f"{Path(filename).stem}_vibration_features.csv", mime="text/csv")

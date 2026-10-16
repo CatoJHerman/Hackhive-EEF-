@@ -2,13 +2,17 @@
 
 ## Current scope
 
-Two separate demonstrations: engine-audio feature extraction and an experimental
-LiU engine sensor-consistency monitor. The recordings are unmatched; no sensor
+Three independent analyses in one dashboard: audio comparison against idle,
+vibration reference comparison, and an experimental LiU sensor-consistency monitor.
+Run `python -m streamlit run app.py` in the installed environment and open
+http://127.0.0.1:8501. The Vibration tab compares uploads automatically with a saved synthetic reference.
+See `DASHBOARD.md` for inputs, model setup and tests.
+The recordings are unmatched; no sensor
 fusion or audio fault classification is claimed. The monitor flags disagreement
 between measured and predicted signals. It does not identify the faulty component
 or establish engine health when no anomaly is detected.
 
-The frozen residual model detected 32.3% of faulty samples on the official test
+The original frozen residual model detected 32.3% of faulty samples on the official test
 set, with 4.2% false alarms across normal samples (7.6% on the full normal run).
 Detection was strongest in intercooler-pressure fault scenarios: 87.5% pooled
 recall. This is a scenario-specific result, not a fault-isolation accuracy.

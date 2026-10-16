@@ -10,6 +10,31 @@ from dashboard_logic import REQUIRED, read_telemetry, alert_intervals, recording
 
 
 class DashboardChecks(unittest.TestCase):
+    def test_all_three_branches_together(self):
+        from streamlit.testing.v1 import AppTest
+        root = str(Path(__file__).resolve().parent)
+        source = f'''
+import io, runpy
+from pathlib import Path
+from unittest.mock import patch
+root = Path({root!r})
+def uploader(label, **kwargs):
+    names = {{"telemetry_upload": "synthetic_telemetry_demo.csv", "audio_upload": "synthetic_audio_comparison.wav", "vibration_input": "synthetic_vibration_changed.csv"}}
+    name = names.get(kwargs.get("key"))
+    if name is None: return None
+    result = io.BytesIO((root / "demo_samples" / name).read_bytes())
+    result.name = name
+    return result
+with patch("streamlit.file_uploader", uploader):
+    runpy.run_path(str(root / "dashboard.py"), run_name="__main__")
+'''
+        app = AppTest.from_string(source).run(timeout=30)
+        self.assertFalse(list(app.exception), str(list(app.exception)))
+        self.assertFalse(list(app.error), str(list(app.error)))
+        labels = [metric.label for metric in app.metric]
+        for label in ("Engine fault risk", "Windows differing from idle", "Signatures outside observed span"):
+            self.assertIn(label, labels)
+
     def test_inspection_guidance_does_not_invent_risk(self):
         rows = pd.DataFrame({"prediction_available": [False, True, True],
                              "status": ["anomaly_detected", "anomaly_detected", "no_anomaly_detected"]})
@@ -74,7 +99,7 @@ class DashboardChecks(unittest.TestCase):
         for entry in ("app.py", "dashboard.py"):
             app = AppTest.from_file(str(Path(__file__).with_name(entry))).run(timeout=30)
             self.assertFalse(list(app.exception), str(list(app.exception)))
-            self.assertEqual(len(app.tabs), 3)
+            self.assertEqual([tab.label for tab in app.tabs], ["Engine telemetry", "Engine audio", "Vibration", "Model evaluation"])
 
     def test_upload_paths(self):
         from streamlit.testing.v1 import AppTest
@@ -100,7 +125,8 @@ else:
     wavfile.write(upload, rate, np.zeros(4000 if kind == "short_wav" else rate * 2, dtype=np.int16))
     upload.name = "test.wav"
 def uploader(label, **kwargs):
-    return upload if ("Telemetry" in label) == (kind in ("csv", "invalid_csv")) else None
+    target = "telemetry_upload" if kind in ("csv", "invalid_csv") else "audio_upload"
+    return upload if kwargs.get("key") == target else None
 with patch("streamlit.file_uploader", uploader):
     runpy.run_path({root!r} + "/dashboard.py", run_name="__main__")
 '''

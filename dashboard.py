@@ -415,7 +415,7 @@ def evaluation():
     st.caption("Official frozen-model test · sample-level results. The intercooler figure applies only to that scenario; it is not overall accuracy or component identification. The weak overall result includes many missed faulty samples.")
     st.write(f"Development validation: {development['pooled']['fault_recall']:.1%} faulty-sample detection and {development['pooled']['false_positive_rate']:.1%} normal-sample false flags across held-out recording folds.")
     st.info("Evaluation uses the LiU benchmark, not a fleet of independent vehicles. Fault onset is approximate; fault-recording evaluation excludes 110–130 seconds. Official test data has already been inspected, so further tuning requires fresh independent evaluation.")
-    st.caption("Current telemetry model: gradient-boosted regression trees. CNN, SVM and ANN/Softmax approaches remain a brief-alignment gap. No accelerometer/vibration pipeline, live ECU/OBD/CAN connection, validated wear prediction or audio fault classifier is present.")
+    st.caption("Current telemetry model: gradient-boosted regression trees. CNN, SVM and ANN/Softmax approaches remain a brief-alignment gap. Vibration supports descriptive reference comparison; live ECU/OBD/CAN connection, validated wear prediction and audio fault classification are not implemented.")
     st.subheader("Results by test recording")
     results = pd.DataFrame(official["recordings"])
     st.dataframe(results[["recording_id", "fault_recall", "false_positive_rate", "tp", "fn", "fp", "tn"]],
@@ -448,15 +448,15 @@ def system_status():
             st.caption("Place the team's residual_model.joblib at the path below, then refresh. You can also set ENGINE_MODEL_PATH before launching.")
         st.code(str(MODEL), language="text")
         st.markdown("#### Analysis workflow")
-        st.write("1. Upload a telemetry CSV or audio WAV.\n2. Inspect signals and available alerts.\n3. Export results for your presentation.")
-        st.caption("Telemetry requires the frozen model for predictions. Audio feature analysis works independently.")
+        st.write("1. Choose telemetry, audio or vibration.\n2. Upload a recording for comparison.\n3. Inspect and export the results.")
+        st.caption("Each recording is analyzed independently. The three analyses do not form a combined engine diagnosis.")
 
 
 st.markdown('<div class="eyebrow">ENGINE SIGNAL STUDIO / EXPERIMENTAL</div>', unsafe_allow_html=True)
 system_status()
 st.title("See what the engine signals show.")
-st.markdown('<div class="intro">An experimental engine-signal analysis and consistency-monitoring dashboard. Inspect uploaded telemetry and audio as separate recordings.</div>', unsafe_allow_html=True)
-t1, t2, t3, t4 = st.tabs(["Engine telemetry", "Engine audio", "Model evaluation", "Vibration"])
+st.markdown('<div class="intro">Explore engine telemetry, audio signatures and vibration reference comparisons in one workspace. Each recording is analyzed independently.</div>', unsafe_allow_html=True)
+t1, t2, t4, t3 = st.tabs(["Engine telemetry", "Engine audio", "Vibration", "Model evaluation"])
 with t1:
     telemetry()
 with t2:

@@ -6,6 +6,33 @@ __pycache__/
 data/
 outputs/
 .DS_Store
+
+# Local environments, caches and editor state
+.venv*/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+
+# Credentials and machine-specific configuration
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+.aws/
+
+# Generated model artifacts and logs (small demo assets/baselines stay tracked)
+models/
+*.joblib
+*.pkl
+*.pickle
+*.log
+
+# Imported datasets and legacy quickstart package
 /vibration/pak_files/
 /vibration/pak_files(faulty)/
 /vibration/engineguard_quickstart(ai)/

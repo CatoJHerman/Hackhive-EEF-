@@ -1,5 +1,21 @@
 # Engine signal dashboard
 
+## Vibration integration
+
+Upload one raw CSV with `time_seconds,sampling_rate_hz,accel_x,accel_y,accel_z`.
+The saved database in `baselines/vibration_reference.csv` is loaded automatically.
+It currently contains three synthetic reference recording vectors at 1,024 Hz,
+created from `demo_samples/synthetic_vibration_reference.zip`; it is not measured
+idle data. Replacement with verified comparable idle measurements is future work.
+
+Each uploaded recording is summarized by median one-second features per axis.
+The dashboard reports outside/within the observed reference range, or unable to
+assess. This is a descriptive observation, not a calibrated threshold or diagnosis.
+Recording medians can hide brief changes. Plots, feature tables and exports are
+available in expandable details. No reference upload or demo selector is needed.
+
+Run `python -m unittest discover` in the installed environment to check all branches.
+
 ## Audio comparison with idle
 
 Upload a 44,100 Hz WAV in Engine audio to compare complete one-second windows
@@ -53,7 +69,7 @@ python -m pip install -r requirements-dashboard.txt
 python -m streamlit run app.py
 ```
 
-The dashboard starts with empty telemetry and audio uploads. Upload a time-ordered
+The dashboard starts with empty telemetry and audio uploads and an empty vibration upload. Upload a time-ordered
 LiU-scale CSV or a WAV file in its respective tab. The required CSV names are listed
 in the app. Unsupported formats, invalid numeric values and nonincreasing time are
 rejected, including invalid optional ambient columns. Uploaded files are processed
@@ -69,6 +85,6 @@ with a model trained on uploaded or official test data.
 Both `app.py` and `dashboard.py` launch the current LiU dashboard. The obsolete
 diesel dashboard has been replaced. Model loading verifies the SHA-256 from the
 official evaluation report. Upload results are cached by complete file content,
-model identity and file revision. Audio
+model identity and file revision. Audio, vibration
 and telemetry are separate analyses with no shared vehicle or clock. The evaluation
 tab shows saved historical benchmark reports, not results from the upload.

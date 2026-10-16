@@ -1,14 +1,15 @@
 """Strict waveform loading and descriptive per-axis reference comparison."""
 import hashlib
 import io
-import importlib.util
 import zipfile
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-PACKAGE = Path(__file__).resolve().parent / "vibration/engineguard_quickstart(ai)"
+from scipy.signal import stft, get_window
+from scipy.stats import kurtosis
+
+BANDS = [(0, 100), (100, 500), (500, 2000), (2000, 5000)]
 AXES = ("accel_x", "accel_y", "accel_z")
 METRICS = ("std", "rms", "peak_abs", "peak_to_peak", "crest_factor",
            "kurtosis_pearson", "dominant_frequency_hz", "spectral_centroid_hz")
@@ -45,14 +46,54 @@ def read_signal(content):
     return values, rate
 
 
+def feature_for_axis(x: np.ndarray, fs: float, axis: str) -> dict:
+    x = np.asarray(x, dtype=float)
+    x = x[np.isfinite(x)]
+    if len(x) < 8:
+        return {f"{axis}_{k}": np.nan for k in ["mean", "std", "rms", "peak_abs", "peak_to_peak", "kurtosis_pearson", "crest_factor", "dominant_frequency_hz", "spectral_centroid_hz"]}
+
+    # Detrending by subtracting the mean is a baseline-removal step, not physical calibration.
+    xc = x - np.mean(x)
+    rms = float(np.sqrt(np.mean(xc ** 2)))
+    peak_abs = float(np.max(np.abs(xc)))
+    window = get_window("hann", len(xc), fftbins=True)
+    spectrum = np.abs(np.fft.rfft(xc * window))
+    freq = np.fft.rfftfreq(len(xc), d=1.0 / fs)
+    if len(spectrum):
+        spectrum[0] = 0.0
+    power = spectrum ** 2
+    total_power = float(power.sum())
+    dominant = float(freq[int(np.argmax(spectrum))]) if np.any(spectrum) else 0.0
+    centroid = float(np.sum(freq * power) / total_power) if total_power > 0 else 0.0
+
+    out = {
+        f"{axis}_mean": float(np.mean(x)),
+        f"{axis}_std": float(np.std(xc)),
+        f"{axis}_rms": rms,
+        f"{axis}_peak_abs": peak_abs,
+        f"{axis}_peak_to_peak": float(np.ptp(xc)),
+        f"{axis}_kurtosis_pearson": float(kurtosis(xc, fisher=False, bias=False)),
+        f"{axis}_crest_factor": float(peak_abs / rms) if rms else 0.0,
+        f"{axis}_dominant_frequency_hz": dominant,
+        f"{axis}_spectral_centroid_hz": centroid,
+    }
+    for lo, hi in BANDS:
+        mask = (freq >= lo) & (freq < hi)
+        frac = float(power[mask].sum() / total_power) if total_power > 0 else 0.0
+        out[f"{axis}_band_{lo}_{hi}hz_power_fraction"] = frac
+
+    nperseg = min(1024, len(xc))
+    noverlap = min(int(nperseg * 0.75), nperseg - 1)
+    _, _, z = stft(xc, fs=fs, window="hann", nperseg=nperseg,
+                   noverlap=noverlap, boundary=None, padded=False)
+    stft_power = np.abs(z) ** 2
+    out[f"{axis}_stft_mean_power"] = float(stft_power.mean()) if stft_power.size else 0.0
+    out[f"{axis}_stft_max_power"] = float(stft_power.max()) if stft_power.size else 0.0
+    return out
+
+
+
 def window_features(data, rate):
-    # Reuse the supplied package's feature definitions, without its classifier/server.
-    source = PACKAGE / "vibration_analysis.py"
-    if not source.is_file():
-        raise ValueError(f"Feature extraction module is missing: {source}")
-    spec = importlib.util.spec_from_file_location("engineguard_signal_features", source)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
     records = []
     for start in range(0, len(data) - rate + 1, rate):
         window = data.iloc[start:start + rate]
@@ -60,18 +101,11 @@ def window_features(data, rate):
                "end_seconds": float(window.time_seconds.iloc[0] + 1), "sampling_rate_hz": rate}
         for axis in AXES:
             signal = window[axis].to_numpy(float)
-            row.update(module.feature_for_axis(signal, rate, axis))
+            row.update(feature_for_axis(signal, rate, axis))
             if np.ptp(signal) == 0:
                 row[axis + "_kurtosis_pearson"] = np.nan
         records.append(row)
     return pd.DataFrame(records)
-
-
-def demo_reference():
-    """Synthetic normal examples across speeds; never label these as measured idle."""
-    frame = pd.read_csv(PACKAGE / "training_features.csv")
-    ids = frame.run_id.str.split("_").str[-1].astype(int)
-    return frame.loc[frame.condition_label.eq("normal") & ids.le(8)].copy()
 
 
 def reference_recordings(content, filename):
