@@ -6,3 +6,6 @@ __pycache__/
 data/
 outputs/
 .DS_Store
+/vibration/pak_files/
+/vibration/pak_files(faulty)/
+/vibration/engineguard_quickstart(ai)/

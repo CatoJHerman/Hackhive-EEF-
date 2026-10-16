@@ -21,6 +21,7 @@ from dashboard_logic import (FEATURES, OPTIONAL, REQUIRED, alert_intervals,
                              read_telemetry, recording_quality, analysis_summary, inspection_guidance)
 from features import extract_features, frequency_spectrum
 from predict import predict_recording
+from vibration_dashboard import vibration_panel
 
 ROOT = Path(__file__).resolve().parent
 MODEL = Path(os.environ.get("ENGINE_MODEL_PATH", str(ROOT / "outputs/liu_residuals/residual_model.joblib")))
@@ -455,10 +456,12 @@ st.markdown('<div class="eyebrow">ENGINE SIGNAL STUDIO / EXPERIMENTAL</div>', un
 system_status()
 st.title("See what the engine signals show.")
 st.markdown('<div class="intro">An experimental engine-signal analysis and consistency-monitoring dashboard. Inspect uploaded telemetry and audio as separate recordings.</div>', unsafe_allow_html=True)
-t1, t2, t3 = st.tabs(["Engine telemetry", "Engine audio", "Model evaluation"])
+t1, t2, t3, t4 = st.tabs(["Engine telemetry", "Engine audio", "Model evaluation", "Vibration"])
 with t1:
     telemetry()
 with t2:
     audio()
 with t3:
     evaluation()
+with t4:
+    vibration_panel()
