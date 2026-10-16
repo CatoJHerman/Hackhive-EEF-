@@ -26,7 +26,7 @@ def read_telemetry(content: bytes) -> pd.DataFrame:
         raise ValueError("Missing required columns: " + ", ".join(missing))
     if frame.empty:
         raise ValueError("CSV has no readings.")
-    for column in REQUIRED:
+    for column in REQUIRED + [name for name in OPTIONAL if name in frame.columns]:
         try:
             values = pd.to_numeric(frame[column], errors="raise")
         except (ValueError, TypeError) as exc:

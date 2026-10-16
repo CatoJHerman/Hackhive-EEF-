@@ -42,7 +42,17 @@ unverified, so do not relabel engine speed as RPM or silently convert inputs.
 
 ## Dashboard handoff
 
-`app.py` belongs to the dashboard teammate. Backend interface:
+The upload-driven dashboard is implemented in `dashboard.py`; `app.py` launches
+the same dashboard. Install and run in the model environment:
+
+```bash
+./.venv-liu/bin/python -m pip install -r requirements-dashboard.txt
+./.venv-liu/bin/python -m streamlit run app.py
+```
+
+See `DASHBOARD.md` for setup. Both entry points support CSV/WAV uploads and a
+historical evaluation tab. WAV processing is in memory for Windows compatibility.
+An optional STFT spectrogram is included. Backend interface:
 
 ```python
 import joblib
@@ -95,7 +105,7 @@ ignored `outputs/` for audit. A recovery archive was saved outside the repositor
 
 ## Remaining project work
 
-1. Connect and test the dashboard interface above, with its owner.
+1. Rehearse the connected dashboard on the presentation computer.
 2. Share the frozen model and representative recordings outside Git.
 3. Rehearse normal, detectable-fault, missed-fault and invalid-upload cases.
 4. Present the full test results, including weak fault families and false alarms.

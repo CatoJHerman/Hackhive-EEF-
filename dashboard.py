@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-import tempfile
+import io
+import hashlib
 from pathlib import Path
 
 import joblib
@@ -11,7 +12,6 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from plotly.subplots import make_subplots
 from scipy.signal import stft
 
 from audio_processing import iter_windows, load_audio
@@ -60,12 +60,20 @@ def line(fig, x, y, name, color):
 
 
 def chart(fig):
-    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False})
+    st.plotly_chart(fig, width="stretch", config={"displaylogo": False})
 
 
 @st.cache_resource(show_spinner="Loading frozen model…")
-def load_model(path: str):
-    return joblib.load(path)
+def load_model(path: str, expected_hash: str, file_stamp: tuple):
+    content = Path(path).read_bytes()
+    if hashlib.sha256(content).hexdigest() != expected_hash:
+        raise ValueError("Model does not match the frozen artifact in reports/official_test.json. Obtain the verified model from the team.")
+    return joblib.load(io.BytesIO(content))
+
+
+@st.cache_data(max_entries=3, show_spinner="Analysing uploaded telemetry…")
+def analyse_telemetry(content: bytes, model_path: str, expected_hash: str, file_stamp: tuple):
+    return predict_recording(read_telemetry(content), load_model(model_path, expected_hash, file_stamp))
 
 
 def telemetry():
@@ -92,8 +100,11 @@ def telemetry():
         sensor_trends(data, list(REQUIRED[1:]), title="Uploaded sensor readings")
         return
     try:
-        rows = predict_recording(data, load_model(str(MODEL)))
-    except (ValueError, OSError, KeyError) as exc:
+        expected_hash = json.loads((ROOT / "reports/official_test.json").read_text())["model_sha256"]
+        stat = MODEL.stat()
+        rows = analyse_telemetry(upload.getvalue(), str(MODEL), expected_hash,
+                                 (stat.st_mtime_ns, stat.st_size))
+    except Exception as exc:
         st.error(f"Model could not analyse this recording: {exc}")
         return
     available = rows.prediction_available.fillna(False).astype(bool)
@@ -110,14 +121,18 @@ def telemetry():
     score = figure("Anomaly score · fixed alert threshold > 1", "Normalized disagreement (not probability)", 340)
     line(score, rows.time, rows.anomaly_score, "Anomaly score", BLUE)
     score.add_hline(y=1, line_dash="dash", line_color=ORANGE, annotation_text="Alert threshold 1")
-    for item in intervals.itertuples(index=False):
-        score.add_vrect(x0=item.start_seconds, x1=item.end_seconds, fillcolor=RED,
-                        opacity=.26, line_width=0)
+    if len(intervals) <= 200:
+        for item in intervals.itertuples(index=False):
+            score.add_vrect(x0=item.start_seconds, x1=item.end_seconds, fillcolor=RED,
+                            opacity=.26, line_width=0)
+    # Mark isolated flags too; thousands of Plotly rectangles can freeze the UI.
+    score.add_trace(go.Scatter(x=rows.loc[flagged, "time"], y=rows.loc[flagged, "anomaly_score"],
+                               mode="markers", marker=dict(color=RED, size=3), name="Flagged readings"))
     chart(score)
-    st.caption("Gaps indicate predictions unavailable while recent history accumulates, including after a time gap. Red shading marks alert intervals.")
+    st.caption("Gaps indicate unavailable predictions. Red points mark flagged readings; interval shading is shown when there are at most 200 intervals. All intervals remain in the table and download.")
     start, end = float(data.time.iloc[0]), float(data.time.iloc[-1])
     selected = st.slider("Inspect a time interval (seconds)", min_value=start, max_value=end,
-                         value=(start, end), key=f"telemetry_range_{upload.name}_{len(upload.getvalue())}") if end > start else (start, end)
+                         value=(start, end), key="telemetry_range_" + hashlib.sha256(upload.getvalue()).hexdigest()) if end > start else (start, end)
     view = rows.time.between(*selected)
     st.subheader("Measured signals and model estimates")
     for target, title in [("intake_manifold_pressure", "Intake manifold pressure"),
@@ -134,7 +149,7 @@ def telemetry():
                   title="Supporting sensor trends")
     st.subheader("Alert intervals")
     st.caption("Consecutive flagged readings; intervals break at unflagged readings, unavailable predictions or time gaps. These are not confirmed fault events.")
-    st.dataframe(intervals, hide_index=True, use_container_width=True)
+    st.dataframe(intervals, hide_index=True, width="stretch")
     a, b = st.columns(2)
     a.download_button("Download predictions CSV", rows.to_csv(index=False).encode(),
                       file_name=f"{Path(upload.name).stem}_predictions.csv", mime="text/csv")
@@ -147,7 +162,7 @@ def sensor_trends(data, choices, title):
     chosen = st.multiselect("Signals (each shown on its own scale)", choices,
                             default=choices[:3], key="sensor_selection")
     for column in chosen:
-        values = pd.to_numeric(data[column], errors="coerce")
+        values = data[column]
         fig = figure(column.replace("_", " ").capitalize(), "Dataset units", 220)
         line(fig, data.time, values, "Measured", BLUE)
         chart(fig)
@@ -165,10 +180,8 @@ def audio():
         return
     content = upload.getvalue()
     try:
-        with tempfile.NamedTemporaryFile(suffix=".wav") as handle:
-            handle.write(content)
-            handle.flush()
-            samples, rate, channels = load_audio(handle.name)
+        # SciPy accepts a file-like object; avoids Windows temporary-file locks.
+        samples, rate, channels = load_audio(io.BytesIO(content))
         if rate < 4 or len(samples) < rate:
             st.warning(f"Recording is too short: {len(samples)/rate:.3f} seconds. At least one complete one-second window is required.")
             return
@@ -189,11 +202,12 @@ def audio():
     trailing = len(samples) - len(windows) * rate
     if trailing:
         st.caption(f"Incomplete trailing window skipped: {trailing/rate:.3f} seconds.")
-    waveform = figure("Complete recording waveform", "Amplitude (full-scale)", 310)
+    waveform = figure("Complete recording waveform", "Amplitude (loader scale)", 310)
     stride = max(1, len(samples) // 15000)
     line(waveform, np.arange(0, len(samples), stride) / rate, samples[::stride], "Mono waveform", BLUE)
     chart(waveform)
-    index = st.selectbox("Complete one-second window", range(len(windows)),
+    st.caption("Waveform is subsampled for display; short peaks may not be visible. Integer PCM is scaled by the loader; float WAV amplitudes are preserved.")
+    index = st.selectbox("Complete one-second window", range(len(windows)), key="audio_window_" + hashlib.sha256(content).hexdigest(),
                          format_func=lambda n: f"{windows[n][0]:.1f}–{windows[n][1]:.1f} s")
     selected = frame.iloc[index]
     cards = st.columns(4)
@@ -211,7 +225,7 @@ def audio():
         fig = figure(label, label, 210)
         line(fig, frame.start_seconds, frame[key], label, BLUE)
         chart(fig)
-    st.dataframe(frame, hide_index=True, use_container_width=True)
+    st.dataframe(frame, hide_index=True, width="stretch")
     st.download_button("Download one-second feature CSV", frame.to_csv(index=False).encode(),
                        file_name=f"{Path(upload.name).stem}_audio_features_1s.csv", mime="text/csv")
     spectrogram(samples, rate)
@@ -221,16 +235,23 @@ def audio():
 
 def spectrogram(samples, rate):
     with st.expander("STFT spectrogram · descriptive frequency view"):
+        if not st.checkbox("Generate spectrogram", value=False):
+            return
         # Bound memory for long uploads without changing the sample rate or extraction.
         display_samples = samples[:min(len(samples), 60 * rate)]
         if len(display_samples) < len(samples):
             st.caption("Spectrogram displays the first 60 seconds; feature extraction covers the complete recording.")
         nperseg = min(1024, len(display_samples))
+        hop = min(nperseg, max(nperseg // 4, int(np.ceil(len(display_samples) / 1000))))
         frequencies, times, z = stft(display_samples, fs=rate, nperseg=nperseg,
-                                      noverlap=nperseg * 3 // 4, boundary=None)
+                                      noverlap=nperseg - hop, boundary=None)
         power = 20 * np.log10(np.maximum(abs(z), 1e-10))
-        fig = go.Figure(go.Heatmap(x=times, y=frequencies, z=power, colorscale="Viridis",
-                                    colorbar=dict(title="Amplitude (dBFS)")))
+        time_stride = max(1, int(np.ceil(len(times) / 1000)))
+        frequency_stride = max(1, int(np.ceil(len(frequencies) / 512)))
+        fig = go.Figure(go.Heatmap(x=times[::time_stride], y=frequencies[::frequency_stride],
+                                    z=power[::frequency_stride, ::time_stride], colorscale="Viridis",
+                                    colorbar=dict(title="dB re 1 amplitude unit")))
+        st.caption("STFT magnitude on the loader's amplitude scale, not calibrated sound pressure. Display grid may be subsampled.")
         fig.update_layout(title="Time–frequency signature", height=410, paper_bgcolor=PANEL,
                           plot_bgcolor=PANEL, font=dict(color=TEXT),
                           xaxis_title="Time (seconds)", yaxis_title="Frequency (Hz)")
