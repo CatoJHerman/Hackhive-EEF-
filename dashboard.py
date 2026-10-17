@@ -20,41 +20,46 @@ from audio_baseline import compare_idle
 from dashboard_logic import (FEATURES, OPTIONAL, REQUIRED, alert_intervals,
                              read_telemetry, recording_quality, analysis_summary, inspection_guidance)
 from features import extract_features, frequency_spectrum
+from fusion_schema import SENSORS, FEATURE_NAMES, PRESETS, assign_fault, input_frame
 from predict import predict_recording
+from demo_controls import example_input
 from vibration_dashboard import vibration_panel
 
 ROOT = Path(__file__).resolve().parent
 MODEL = Path(os.environ.get("ENGINE_MODEL_PATH", str(ROOT / "outputs/liu_residuals/residual_model.joblib")))
 BASELINE = ROOT / "baselines/normal_idle_features_1s.csv"
-BLUE, ORANGE, RED, GREY = "#2794ec", "#f5a23c", "#e75b68", "#8692a5"
-BG, PANEL, TEXT = "#0d1423", "#172237", "#eaf2ff"
 
-st.set_page_config(page_title="Engine signal studio", page_icon="◉", layout="wide")
+# Premium Corporate Color Palette
+BLUE, ORANGE, RED, GREY = "#00d4ff", "#ff9d00", "#ff3366", "#6c7a89"
+BG, PANEL, TEXT = "#090d14", "#131b2b", "#f0f4f8"
+SUCCESS = "#00e676"
+
+st.set_page_config(page_title="Engine Diagnostics Command Center", page_icon="⚙️", layout="wide", initial_sidebar_state="expanded")
+
+# Executive Dashboard CSS
 st.markdown(f"""<style>
-.stApp {{background:{BG}; color:{TEXT}}}
-.block-container {{max-width:1350px; padding-top:2rem; padding-bottom:3rem}}
-h1,h2,h3 {{letter-spacing:-.035em}}
-h1 {{font-size:2.65rem!important}}
-[data-testid="stMetric"] {{background:{PANEL};border:1px solid #28354c;border-radius:18px;padding:16px 20px}}
-[data-testid="stMetricLabel"] {{color:#aab8cc}}
-[data-testid="stMetricValue"] {{color:{TEXT}}}
-[data-testid="stFileUploaderDropzone"] {{background:{PANEL};border:1px dashed #587092;border-radius:16px}}
-[data-testid="stAlert"], [data-testid="stExpander"] {{border-radius:14px}}
-button[data-baseweb="tab"] {{font-weight:700}}
-button[data-baseweb="tab"][aria-selected="true"] {{color:#58b8fa}}
-.eyebrow {{color:#68cce5;letter-spacing:.16em;font-size:.76rem;font-weight:700}}
-.intro {{color:#abbcd0;max-width:850px;line-height:1.6}}
+.stApp {{background:{BG}; color:{TEXT}; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;}}
+.block-container {{max-width:98%; padding-top:1.5rem; padding-bottom:3rem;}}
+h1,h2,h3 {{font-weight: 700; letter-spacing: -0.5px;}}
+h1 {{font-size:2.4rem!important; border-bottom: 2px solid #1a2538; padding-bottom: 10px; margin-bottom: 20px;}}
+[data-testid="stMetric"] {{background:{PANEL}; border:1px solid #233147; border-radius:8px; padding:12px 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);}}
+[data-testid="stMetricLabel"] {{color:#8b9eb3; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.75rem;}}
+[data-testid="stMetricValue"] {{color:{TEXT}; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 1.6rem; font-weight: 600;}}
+[data-testid="stExpander"] {{background:{PANEL}; border: 1px solid #233147; border-radius: 8px;}}
+.status-indicator {{font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 5px;}}
+button[data-baseweb="tab"] {{font-weight:700; font-size: 1.05rem;}}
+button[data-baseweb="tab"][aria-selected="true"] {{color:{BLUE}; border-bottom-color: {BLUE};}}
 </style>""", unsafe_allow_html=True)
 
 
 def figure(title, y_label, height=300):
     fig = go.Figure()
-    fig.update_layout(title=dict(text=title, font=dict(size=17)), height=height,
-                      paper_bgcolor=PANEL, plot_bgcolor=PANEL, font=dict(color=TEXT),
+    fig.update_layout(title=dict(text=title, font=dict(size=17, color='#8b9eb3')), height=height,
+                      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color=TEXT),
                       margin=dict(l=42, r=24, t=54, b=42), hovermode="x unified",
                       legend=dict(orientation="h", y=1.12, x=0),
-                      xaxis=dict(title="Time (seconds)", gridcolor="#304059", zeroline=False),
-                      yaxis=dict(title=y_label, gridcolor="#304059", zeroline=False))
+                      xaxis=dict(title="Time (seconds)", gridcolor="#1a2538", zeroline=False),
+                      yaxis=dict(title=y_label, gridcolor="#1a2538", zeroline=False))
     return fig
 
 
@@ -90,8 +95,105 @@ def analyse_telemetry(content: bytes, model_path: str, expected_hash: str, file_
     return predict_recording(read_telemetry(content), load_model(model_path, expected_hash, file_stamp))
 
 
+def create_radar_chart(features_dict):
+    categories = ['RPM', 'Temp', 'Vibration', 'Acoustic Freq', 'Intake Press', 'Air Mass']
+    values = [
+        min(100, (features_dict['engine_speed'] / 6000) * 100),
+        min(100, ((features_dict['intercooler_temperature'] - 270) / 110) * 100),
+        min(100, (features_dict['accel_z_std'] / 5.0) * 100),
+        min(100, (features_dict['dominant_frequency_hz'] / 5000) * 100),
+        min(100, ((features_dict['intake_manifold_pressure'] - 80000) / 70000) * 100),
+        min(100, (features_dict['air_mass_flow'] / 500) * 100)
+    ]
+    values.append(values[0])
+    categories.append(categories[0])
+
+    fig = go.Figure(go.Scatterpolar(
+        r=values, theta=categories, fill='toself',
+        fillcolor='rgba(0, 212, 255, 0.2)', line=dict(color=BLUE, width=2)
+    ))
+    fig.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 100], gridcolor='#1a2538', tickfont=dict(color='#8b9eb3')),
+                   angularaxis=dict(gridcolor='#1a2538', tickfont=dict(color=TEXT))),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=20, b=20, l=20, r=20), height=350
+    )
+    return fig
+
+
+@st.cache_resource(show_spinner="Loading synthetic fusion SVM...")
+def load_fusion_model(path, revision):
+    model = joblib.load(path)
+    if getattr(model, "fusion_schema_version", None) != 1 or list(model.feature_names_in_) != FEATURE_NAMES:
+        raise ValueError("Fusion artifact is outdated. Run train_fusion_model.py to rebuild the scaled pipeline.")
+    if "standardscaler" not in model.named_steps:
+        raise ValueError("Fusion model must include StandardScaler.")
+    return model
+
+
+def apply_fusion_preset(label):
+    for key, value in PRESETS[label].items():
+        st.session_state["fusion_" + key] = float(value)
+
+
+def multimodal_fusion():
+    st.subheader("Multimodal fusion simulator")
+    st.warning("Synthetic demonstration: the SVM learns hand-coded example rules, not validated mechanical diagnoses. These controls simulate a joint feature row; uploaded audio, vibration and ECU recordings are not fused or synchronized.")
+    path = ROOT / "outputs/fusion_model/multimodal_svm.pkl"
+    try:
+        stat = path.stat()
+        fusion_model = load_fusion_model(str(path), (stat.st_mtime_ns, stat.st_size))
+    except Exception as exc:
+        st.error(f"Fusion unavailable: {exc}. Run train_fusion_model.py to initialize.")
+        return
+    st.caption("Load a reproducible scenario, then adjust any of the 14 controls. All inference goes through StandardScaler and SVC; no rule overrides the model prediction.")
+    for column, label in zip(st.columns(5), PRESETS):
+        column.button(label, key="preset_" + label, on_click=apply_fusion_preset, args=(label,))
+    features = {}
+    for title, names in [("Acoustic features", FEATURE_NAMES[:2]),
+                         ("Vibration features", FEATURE_NAMES[2:4]),
+                         ("ECU features", FEATURE_NAMES[4:])]:
+        with st.expander(title, expanded=True):
+            columns = st.columns(2 if len(names) == 2 else 5)
+            for i, key in enumerate(names):
+                low, high, default, label = SENSORS[key]
+                widget = "fusion_" + key
+                if widget not in st.session_state:
+                    st.session_state[widget] = default
+                features[key] = columns[i % len(columns)].slider(label, min_value=low, max_value=high,
+                                                                  key=widget, format="%.2f")
+    try:
+        frame = input_frame(features)
+        prediction = str(fusion_model.predict(frame)[0])
+        probabilities = fusion_model.predict_proba(frame)[0]
+    except (ValueError, TypeError) as exc:
+        st.error(f"Fusion inference failed: {exc}")
+        return
+    radar_col, diagnosis_col = st.columns([1, 2])
+    with radar_col:
+        chart(create_radar_chart(features))
+        st.caption("Radar shows simulator range positions, not risk percentages.")
+    with diagnosis_col:
+        st.metric("SVM synthetic scenario", prediction)
+        st.write("Nominal demo pattern; this does not establish engine health." if prediction == "Nominal Operation"
+                 else "Pattern matches a synthetic fault example; no real fault or imminent failure is established.")
+        expected = assign_fault(features)
+        st.caption(f"Synthetic generator rule for this input: {expected}")
+        if prediction != expected:
+            st.warning("SVM and generator rule disagree here. Learned boundaries are approximate, especially near thresholds and overlapping scenarios.")
+        st.dataframe(pd.DataFrame({"Synthetic class": fusion_model.classes_,
+                                   "Model probability estimate": probabilities}), hide_index=True, width="stretch")
+        st.caption("Estimates apply to the artificial training distribution. They are not calibrated real-engine fault probabilities; SVC probability ranking can differ from its predicted class.")
+    with st.expander("Exact model input and rule thresholds"):
+        st.dataframe(frame, hide_index=True, width="stretch")
+        st.write("Knocking: vibration std > 3.5, audio frequency < 1000 Hz, intake pressure > 120000. "
+                 "Valve wear: audio frequency > 4000 Hz, speed > 4500, intercooler temperature > 350. "
+                 "Misfire: speed < 1200, vibration std > 4, airflow < 50. "
+                 "Turbo stress: throttle > 80, wastegate < 20, intercooler pressure > 140000. "
+                 "Rules use strict inequalities and this priority order if several match. Five of the 14 inputs are not used by these illustrative rules.")
+
+
 def telemetry():
-    st.subheader("Engine telemetry")
+    st.subheader("Historical Telemetry Analysis")
     st.caption("Upload one time-ordered LiU-scale CSV. Time is in seconds; other values remain in original dataset units. No unit conversion or missing-value filling is applied.")
     with st.expander("Required CSV columns and scale", expanded=False):
         st.code(", ".join(REQUIRED), language="text")
@@ -99,6 +201,11 @@ def telemetry():
         st.download_button("Download CSV column template", ",".join(REQUIRED) + "\n",
                            file_name="telemetry_template.csv", mime="text/csv")
     upload = st.file_uploader("Telemetry CSV", type=["csv"], key="telemetry_upload")
+    upload = example_input(upload, "telemetry", [
+        ("Try normal telemetry", ROOT / "outputs/judging_examples/liu_normal_training.csv", "LiU normal recording, first 30 seconds. Training-data excerpt, not an independent evaluation."),
+        ("Try pressure-fault telemetry", ROOT / "outputs/judging_examples/liu_pressure_fault_training.csv", "LiU intercooler-pressure scenario, 150-180 seconds. Training-data excerpt with approximate fault timing; not independent validation."),
+        ("Try synthetic telemetry", ROOT / "demo_samples/synthetic_telemetry_demo.csv", "Generated processing example; not measured engine data."),
+    ])
     demo = ROOT / "demo_samples/synthetic_telemetry_demo.csv"
     if demo.is_file():
         st.download_button("Download demo telemetry CSV", demo.read_bytes(),
@@ -170,6 +277,10 @@ def telemetry():
     cols[3].metric("Flagged readings · available", f"{flagged.sum() / available.sum():.1%}" if available.any() else "—")
     state = "Anomaly detected" if flagged.any() else ("No anomaly detected" if available.any() else "Waiting for sufficient history")
     st.markdown(f"### {state}")
+    if flagged.any():
+        st.write("What this means: some sensor readings disagree unusually with the relationships learned during normal operation.")
+    elif available.any():
+        st.write("What this means: the model found no alert-level disagreement in the readings it could assess; faults can still be missed.")
     st.caption("Alerts indicate unusual disagreement between sensor readings and learned normal relationships. They do not confirm a component fault. No anomaly detected does not establish engine health.")
     score = figure("Anomaly score · fixed alert threshold > 1", "Normalized disagreement (not probability)", 340)
     line(score, rows.time, rows.anomaly_score, "Anomaly score", BLUE)
@@ -178,7 +289,6 @@ def telemetry():
         for item in intervals.itertuples(index=False):
             score.add_vrect(x0=item.start_seconds, x1=item.end_seconds, fillcolor=RED,
                             opacity=.26, line_width=0)
-    # Mark isolated flags too; thousands of Plotly rectangles can freeze the UI.
     score.add_trace(go.Scatter(x=rows.loc[flagged, "time"], y=rows.loc[flagged, "anomaly_score"],
                                mode="markers", marker=dict(color=RED, size=3), name="Flagged readings"))
     chart(score)
@@ -228,9 +338,12 @@ def sensor_trends(data, choices, title):
 
 
 def audio():
-    st.subheader("Engine audio")
+    st.subheader("Engine Audio Signatures")
     st.caption("WAV analysis in complete one-second windows. Audio and telemetry recordings are separate and are not synchronized.")
     upload = st.file_uploader("Engine audio WAV", type=["wav"], key="audio_upload")
+    upload = example_input(upload, "audio", [
+        ("Try audio example", ROOT / "demo_samples/synthetic_audio_comparison.wav", "Generated 12-second audio: six seconds within idle feature ranges, followed by six seconds with changed sound. Not an engine-fault recording."),
+    ])
     demo_audio = ROOT / "demo_samples/synthetic_audio_comparison.wav"
     if demo_audio.is_file():
         st.download_button("Download demo audio WAV", demo_audio.read_bytes(),
@@ -245,7 +358,6 @@ def audio():
         return
     content = upload.getvalue()
     try:
-        # SciPy accepts a file-like object; avoids Windows temporary-file locks.
         samples, rate, channels = load_audio(io.BytesIO(content))
         if rate < 4 or len(samples) < rate:
             st.warning(f"Recording is too short: {len(samples)/rate:.3f} seconds. At least one complete one-second window is required.")
@@ -303,7 +415,6 @@ def spectrogram(samples, rate):
     with st.expander("STFT spectrogram · descriptive frequency view"):
         if not st.checkbox("Generate spectrogram", value=False):
             return
-        # Bound memory for long uploads without changing the sample rate or extraction.
         display_samples = samples[:min(len(samples), 60 * rate)]
         if len(display_samples) < len(samples):
             st.caption("Spectrogram displays the first 60 seconds; feature extraction covers the complete recording.")
@@ -318,8 +429,8 @@ def spectrogram(samples, rate):
                                     z=power[::frequency_stride, ::time_stride], colorscale="Viridis",
                                     colorbar=dict(title="dB re 1 amplitude unit")))
         st.caption("STFT magnitude on the loader's amplitude scale, not calibrated sound pressure. Display grid may be subsampled.")
-        fig.update_layout(title="Time–frequency signature", height=410, paper_bgcolor=PANEL,
-                          plot_bgcolor=PANEL, font=dict(color=TEXT),
+        fig.update_layout(title="Time–frequency signature", height=410, paper_bgcolor="rgba(0,0,0,0)",
+                          plot_bgcolor="rgba(0,0,0,0)", font=dict(color=TEXT),
                           xaxis_title="Time (seconds)", yaxis_title="Frequency (Hz)")
         chart(fig)
 
@@ -340,7 +451,7 @@ def reference(frame):
         fig.add_vline(x=float(frame[feature].median()), line_color=BLUE, line_width=3,
                       annotation_text="Uploaded median")
         fig.update_layout(title=feature.replace("_", " ").title(), xaxis_title=feature,
-                          yaxis_title="Reference rows", paper_bgcolor=PANEL, plot_bgcolor=PANEL,
+                          yaxis_title="Reference rows", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                           font=dict(color=TEXT), height=310)
         chart(fig)
 
@@ -364,6 +475,7 @@ def idle_comparison(frame, filename):
     a.metric("Windows differing from idle", f"{summary['different_windows_percent']:.1f}%")
     b.metric("Compared windows", summary["uploaded_windows"])
     c.metric("Idle reference windows", summary["baseline_windows"])
+    st.write(f"What this means: {summary['different_windows']} of {summary['uploaded_windows']} one-second pieces differ from the idle reference in at least one sound feature. This does not identify the cause.")
     st.caption(f"A window differs if any feature is outside its idle 5th–95th percentile range. "
                f"Even the saved idle reference has {summary['idle_reference_outside_percent']:.1f}% of windows outside at least one range. "
                "These are descriptive bands, not validated diagnostic thresholds or a fault-risk percentage.")
@@ -387,12 +499,11 @@ def idle_comparison(frame, filename):
                       file_name=f"{Path(filename).stem}_idle_comparison.csv", mime="text/csv")
     b.download_button("Download idle summary JSON", json.dumps(summary, indent=2, allow_nan=False),
                       file_name=f"{Path(filename).stem}_idle_summary.json", mime="application/json")
-    st.caption("Reference: saved normal_idle_features_1s.csv, 44.1 kHz one-second features. "
-               "Raw idle WAVs are unavailable in this checkout, so extraction provenance and independent-session coverage have not been reverified.")
 
 
 def evaluation():
     st.subheader("Model evaluation · historical LiU benchmark")
+    st.warning("Historical results for the original frozen telemetry model only. These numbers do not evaluate the current rebuilt telemetry model, vibration/audio comparisons, or synthetic fusion SVM.")
     try:
         with (ROOT / "reports/official_test.json").open() as handle:
             official = json.load(handle)
@@ -429,39 +540,36 @@ def evaluation():
                        file_name="historical_benchmark.csv", mime="text/csv")
 
 
-def system_status():
-    with st.sidebar:
-        st.markdown("### Engine signal studio")
-        st.caption("HACKATHON WORKSPACE")
-        st.markdown("#### Model connection")
-        if MODEL.is_file():
-            try:
-                expected, provenance = model_identity()
-                stat = MODEL.stat()
-                load_model(str(MODEL), expected, (stat.st_mtime_ns, stat.st_size))
-                st.success("Model verified and loaded")
-                st.caption(provenance)
-            except Exception as exc:
-                st.error(f"Model unavailable: {exc}")
-        else:
-            st.warning("Frozen model not connected")
-            st.caption("Place the team's residual_model.joblib at the path below, then refresh. You can also set ENGINE_MODEL_PATH before launching.")
-        st.code(str(MODEL), language="text")
-        st.markdown("#### Analysis workflow")
-        st.write("1. Choose telemetry, audio or vibration.\n2. Upload a recording for comparison.\n3. Inspect and export the results.")
-        st.caption("Each recording is analyzed independently. The three analyses do not form a combined engine diagnosis.")
+# Main Application Structure
+with st.sidebar:
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("### SYSTEM DIAGNOSTICS")
+    st.markdown(f"<div class='status-indicator' style='color:{SUCCESS};'>🟢 LOCAL DATA ANALYSIS</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='status-indicator' style='color:{SUCCESS};'>🟢 DSP AUDIO PROCESSING: ACTIVE</div>", unsafe_allow_html=True)
 
+    if (ROOT / "outputs/fusion_model/multimodal_svm.pkl").is_file():
+        st.markdown(f"<div class='status-indicator' style='color:{SUCCESS};'>🟢 SYNTHETIC SVM ARTIFACT: PRESENT</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='status-indicator' style='color:{RED};'>🔴 SVM FUSION MATRIX: OFFLINE</div>", unsafe_allow_html=True)
+        st.caption("Run train_fusion_model.py to initialize.")
 
-st.markdown('<div class="eyebrow">ENGINE SIGNAL STUDIO / EXPERIMENTAL</div>', unsafe_allow_html=True)
-system_status()
-st.title("See what the engine signals show.")
-st.markdown('<div class="intro">Explore engine telemetry, audio signatures and vibration reference comparisons in one workspace. Each recording is analyzed independently.</div>', unsafe_allow_html=True)
-t1, t2, t4, t3 = st.tabs(["Engine telemetry", "Engine audio", "Vibration", "Model evaluation"])
-with t1:
-    telemetry()
-with t2:
-    audio()
-with t3:
-    evaluation()
-with t4:
-    vibration_panel()
+st.title("Multivariable Engine Analysis Command Center")
+st.markdown("Centralized visualization of time-domain signatures, ECU telemetry, and high-frequency vibration arrays.", unsafe_allow_html=True)
+
+with st.expander("Judging walkthrough and data sources"):
+    st.write("1. ECU telemetry: try the normal and pressure-fault examples. These are LiU training excerpts, not independent performance tests.")
+    st.write("2. Acoustic spectra: try the generated audio example. Its second half differs from the saved idle feature ranges.")
+    st.write("3. Vibration array: try matching and changed examples against the synthetic baseline.")
+    st.write("4. Multimodal simulator: choose a scenario, then adjust controls. The SVM learns synthetic labeling rules; it does not fuse the uploaded recordings.")
+    st.caption("Alerts and differences support investigation. No module establishes engine safety, remaining life, or validated specific mechanical diagnoses.")
+
+# Keep measured-data analysis first; show the synthetic fusion extension separately.
+tab2, tab3, tab4, tab1, tab5 = st.tabs([
+    "ECU TELEMETRY", "ACOUSTIC SPECTRA", "VIBRATION ARRAY",
+    "MULTIMODAL SIMULATOR", "HISTORICAL BENCHMARKS"
+])
+with tab1: multimodal_fusion()
+with tab2: telemetry()
+with tab3: audio()
+with tab4: vibration_panel()
+with tab5: evaluation()

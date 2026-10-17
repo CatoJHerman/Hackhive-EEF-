@@ -6,6 +6,7 @@ import streamlit as st
 import plotly.graph_objects as go
 from scipy.signal import stft
 from vibration_baseline import AXES, read_signal, window_features, compare_reference
+from demo_controls import example_input
 
 ROOT = Path(__file__).resolve().parent
 BASELINE = ROOT / "baselines/vibration_reference.csv"
@@ -16,6 +17,10 @@ def vibration_panel():
     st.caption("Upload a vibration recording. It is compared automatically with the saved baseline.")
     st.info("Current baseline: three synthetic reference recordings at 1,024 Hz. This tests comparison only; it is not a verified engine-idle baseline.")
     upload = st.file_uploader("Vibration recording CSV", type=["csv"], key="vibration_input")
+    upload = example_input(upload, "vibration", [
+        ("Try matching vibration", ROOT / "demo_samples/synthetic_vibration_matching.csv", "Generated matching example against a synthetic baseline; not measured engine data."),
+        ("Try changed vibration", ROOT / "demo_samples/synthetic_vibration_changed.csv", "Generated stronger-vibration example against a synthetic baseline; not measured engine data."),
+    ])
     with st.expander("CSV format and test files"):
         st.code("time_seconds,sampling_rate_hz,accel_x,accel_y,accel_z", language="text")
         st.caption("Use matching sample rate, axes, units and acquisition settings. At least one complete second is required.")
@@ -44,6 +49,7 @@ def vibration_panel():
         else:
             st.warning("Unable to fully assess ? insufficient usable baseline or signal features")
         st.caption("This is a descriptive outlier observation, not a fault diagnosis or a probability. Matching the baseline does not establish engine health.")
+        st.write(f"What this means: {int(outside.sum())} vibration signatures are outside the saved reference span. The comparison shows a difference, not which part caused it.")
         with st.expander("Comparison details"):
             st.metric("Signatures outside observed span", f"{int(outside.sum())} / {int(comparable.sum())}")
             st.caption("Each recording contributes one median feature vector. Comparison uses the observed minimum?maximum across reference recordings; brief changes can be hidden by a recording median.")

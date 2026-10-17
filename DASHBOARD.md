@@ -1,5 +1,40 @@
 # Engine signal dashboard
 
+## Judging walkthrough
+
+Use the one-click example buttons in each analysis tab. Uploaded files take
+priority; remove an upload to enable examples, or use Clear example to reset.
+Telemetry examples under `outputs/judging_examples/` are unmodified 30-second
+excerpts from the prepared LiU training recordings: wltp_NF at 0-30 seconds and
+wltp_f_pic_090 at 150-180 seconds. They are walkthrough inputs, not held-out
+performance evidence, and remain local/ignored with the original data.
+Audio and vibration examples are generated and visibly labeled synthetic.
+
+The on-page walkthrough explains the demonstration sequence. Existing model
+settings and thresholds were not changed for these presentation controls.
+
+## Synthetic multimodal SVM simulator
+
+The first tab simulates one 14-feature row using the schema in `fusion_schema.py`.
+Training and sliders share feature names, order, numeric types and ranges.
+`python train_fusion_model.py` generates 5,000 rule-labeled synthetic rows (1,000
+per class), fits StandardScaler + SVC on 4,000 rows and evaluates on 1,000 held-out
+rows. It saves `outputs/fusion_model/multimodal_svm.pkl` and
+`outputs/fusion_model/synthetic_validation.json`. The previous model is backed up
+as `multimodal_svm.before_fix.pkl` if present. Importing the script does not train.
+
+Use the five scenario buttons, then adjust sliders. The displayed prediction is
+always the SVM output; the generator rule is shown separately for comparison.
+Rules use strict thresholds and priority order: knocking, valve wear, misfire,
+turbo stress, otherwise nominal. Inputs near boundaries may disagree with rules.
+Five inputs are not used by the illustrative labeling rules. Balanced synthetic
+classes do not represent real-world fault prevalence. Neither the synthetic
+validation score nor model probability estimates establish engine diagnostic
+accuracy. The existing file-upload branches remain independent and are not fused.
+
+Run `python -m unittest discover` after generating the model to check inference,
+schema, reachable scenarios, dashboard buttons and the existing upload flows.
+
 ## Vibration integration
 
 Upload one raw CSV with `time_seconds,sampling_rate_hz,accel_x,accel_y,accel_z`.
