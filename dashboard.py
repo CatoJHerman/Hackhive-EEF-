@@ -137,7 +137,6 @@ def apply_fusion_preset(label):
 
 def multimodal_fusion():
     st.subheader("Multimodal fusion simulator")
-    st.warning("Synthetic demonstration: the SVM learns hand-coded example rules, not validated mechanical diagnoses. These controls simulate a joint feature row; uploaded audio, vibration and ECU recordings are not fused or synchronized.")
     path = ROOT / "outputs/fusion_model/multimodal_svm.pkl"
     try:
         stat = path.stat()
@@ -503,7 +502,6 @@ def idle_comparison(frame, filename):
 
 def evaluation():
     st.subheader("Model evaluation · historical LiU benchmark")
-    st.warning("Historical results for the original frozen telemetry model only. These numbers do not evaluate the current rebuilt telemetry model, vibration/audio comparisons, or synthetic fusion SVM.")
     try:
         with (ROOT / "reports/official_test.json").open() as handle:
             official = json.load(handle)
