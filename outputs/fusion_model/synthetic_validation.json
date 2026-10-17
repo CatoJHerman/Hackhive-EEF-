@@ -1,0 +1,126 @@
+{
+  "data_origin": "synthetic_rule_demo",
+  "generated_rows": 5000,
+  "training_rows": 4000,
+  "held_out_rows": 1000,
+  "features": [
+    "dominant_frequency_hz",
+    "rms",
+    "accel_z_std",
+    "accel_z_spectral_centroid_hz",
+    "engine_speed",
+    "throttle_position",
+    "injected_fuel_mass",
+    "air_mass_flow",
+    "intake_manifold_pressure",
+    "Intercooler_pressure",
+    "intercooler_temperature",
+    "wastegate_position",
+    "ambient_pressure",
+    "ambient_temperature"
+  ],
+  "class_counts": {
+    "Nominal Operation": 1000,
+    "Mechanical Knocking": 1000,
+    "Valve Train Wear": 1000,
+    "Engine Misfire": 1000,
+    "Turbocharger Stress": 1000
+  },
+  "classification_report": {
+    "Engine Misfire": {
+      "precision": 0.9753694581280788,
+      "recall": 0.99,
+      "f1-score": 0.9826302729528535,
+      "support": 200.0
+    },
+    "Mechanical Knocking": {
+      "precision": 0.9282296650717703,
+      "recall": 0.97,
+      "f1-score": 0.9486552567237164,
+      "support": 200.0
+    },
+    "Nominal Operation": {
+      "precision": 0.96045197740113,
+      "recall": 0.85,
+      "f1-score": 0.9018567639257294,
+      "support": 200.0
+    },
+    "Turbocharger Stress": {
+      "precision": 0.945273631840796,
+      "recall": 0.95,
+      "f1-score": 0.9476309226932669,
+      "support": 200.0
+    },
+    "Valve Train Wear": {
+      "precision": 0.9380952380952381,
+      "recall": 0.985,
+      "f1-score": 0.9609756097560975,
+      "support": 200.0
+    },
+    "accuracy": 0.949,
+    "macro avg": {
+      "precision": 0.9494839941074027,
+      "recall": 0.9490000000000001,
+      "f1-score": 0.9483497652103328,
+      "support": 1000.0
+    },
+    "weighted avg": {
+      "precision": 0.9494839941074026,
+      "recall": 0.949,
+      "f1-score": 0.9483497652103329,
+      "support": 1000.0
+    }
+  },
+  "classes": [
+    "Engine Misfire",
+    "Mechanical Knocking",
+    "Nominal Operation",
+    "Turbocharger Stress",
+    "Valve Train Wear"
+  ],
+  "confusion_matrix": [
+    [
+      198,
+      2,
+      0,
+      0,
+      0
+    ],
+    [
+      2,
+      194,
+      3,
+      1,
+      0
+    ],
+    [
+      0,
+      10,
+      170,
+      9,
+      11
+    ],
+    [
+      3,
+      3,
+      2,
+      190,
+      2
+    ],
+    [
+      0,
+      0,
+      2,
+      1,
+      197
+    ]
+  ],
+  "preset_predictions": {
+    "Nominal Operation": "Nominal Operation",
+    "Mechanical Knocking": "Mechanical Knocking",
+    "Valve Train Wear": "Valve Train Wear",
+    "Engine Misfire": "Engine Misfire",
+    "Turbocharger Stress": "Turbocharger Stress"
+  },
+  "limitations": "Held-out synthetic rows measure reproduction of hand-coded rules only. Independent random draws are not synchronized physical measurements. No real-engine accuracy or real-world fault probabilities are established."
+}

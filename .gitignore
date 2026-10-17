@@ -3,8 +3,8 @@
 .venv-liu/
 __pycache__/
 *.pyc
-data/
-outputs/
+#data/
+#outputs/
 .DS_Store
 
 # Local environments, caches and editor state
@@ -33,6 +33,6 @@ models/
 *.log
 
 # Imported datasets and legacy quickstart package
-/vibration/pak_files/
-/vibration/pak_files(faulty)/
-/vibration/engineguard_quickstart(ai)/
+#/vibration/pak_files/
+#/vibration/pak_files(faulty)/
+#/vibration/engineguard_quickstart(ai)/

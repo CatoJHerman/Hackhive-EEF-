@@ -1,0 +1,95 @@
+{
+  "source_archive": "C:\\Users\\catoj\\Downloads\\trainingdata.zip",
+  "source_sha256": "64feb97669f48fc93e45efd29ff73ab15f2e4163b7de5673d16f327df7f5bd58",
+  "documentation": "https://vehsys.gitlab-pages.liu.se/diagnostic_competition/index_competition_24",
+  "normal_before_seconds": 110.0,
+  "fault_after_seconds": 130.0,
+  "timing_status": "Provisional assumptions around documented approximate 120-second onset.",
+  "units": "Original CSV scale retained; complete physical-unit dictionary unverified.",
+  "target": "fault_present: 0 normal, 1 fault, blank uncertain",
+  "training_filter": "Use only training_eligible == 1; never fill uncertain targets with zero.",
+  "forbidden_model_inputs": [
+    "time",
+    "recording_id",
+    "source_row",
+    "scenario",
+    "fault_family",
+    "fault_present",
+    "training_eligible",
+    "label_basis"
+  ],
+  "evaluation": "Keep source recordings grouped. Official test data is not included here.",
+  "source_row_definition": "1-based data row, excluding CSV header",
+  "totals": {
+    "rows": 288623,
+    "normal": 51468,
+    "fault": 234355,
+    "uncertain": 2800
+  },
+  "recordings": [
+    {
+      "recording_id": "wltp_NF",
+      "scenario": "normal",
+      "rows": 36068,
+      "normal": 36068,
+      "fault": 0,
+      "uncertain": 0
+    },
+    {
+      "recording_id": "wltp_f_iml_6mm",
+      "scenario": "intake_manifold_leak",
+      "rows": 36012,
+      "normal": 2200,
+      "fault": 33412,
+      "uncertain": 400
+    },
+    {
+      "recording_id": "wltp_f_pic_090",
+      "scenario": "intercooler_pressure_sensor",
+      "rows": 36061,
+      "normal": 2200,
+      "fault": 33461,
+      "uncertain": 400
+    },
+    {
+      "recording_id": "wltp_f_pic_110",
+      "scenario": "intercooler_pressure_sensor",
+      "rows": 36127,
+      "normal": 2200,
+      "fault": 33527,
+      "uncertain": 400
+    },
+    {
+      "recording_id": "wltp_f_pim_080",
+      "scenario": "intake_manifold_pressure_sensor",
+      "rows": 36120,
+      "normal": 2200,
+      "fault": 33520,
+      "uncertain": 400
+    },
+    {
+      "recording_id": "wltp_f_pim_090",
+      "scenario": "intake_manifold_pressure_sensor",
+      "rows": 36117,
+      "normal": 2200,
+      "fault": 33517,
+      "uncertain": 400
+    },
+    {
+      "recording_id": "wltp_f_waf_105",
+      "scenario": "air_mass_flow_sensor",
+      "rows": 36084,
+      "normal": 2200,
+      "fault": 33484,
+      "uncertain": 400
+    },
+    {
+      "recording_id": "wltp_f_waf_110",
+      "scenario": "air_mass_flow_sensor",
+      "rows": 36034,
+      "normal": 2200,
+      "fault": 33434,
+      "uncertain": 400
+    }
+  ]
+}

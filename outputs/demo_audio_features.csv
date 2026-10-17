@@ -1,0 +1,7 @@
+recording_id,start_seconds,end_seconds,sample_rate,rms,peak_amplitude,crest_factor,dominant_frequency_hz
+generated_test,0.0,1.0,8000,0.3535445905510592,0.5,1.4142487634181171,100.0
+generated_test,1.0,2.0,8000,0.3535445905510592,0.5,1.4142487634181171,100.0
+generated_test,2.0,3.0,8000,0.35355173263773304,0.5,1.4142201942263575,400.0
+generated_test,3.0,4.0,8000,0.35355173263773304,0.5,1.4142201942263575,400.0
+generated_test,4.0,5.0,8000,0.0,0.0,0.0,0.0
+generated_test,5.0,6.0,8000,0.0,0.0,0.0,0.0

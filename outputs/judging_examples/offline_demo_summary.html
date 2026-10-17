@@ -1,0 +1,61 @@
+<!doctype html><meta charset="utf-8"><title>EngineGuard offline demo summary</title><style>body{font:16px system-ui;margin:40px;max-width:1200px}table{border-collapse:collapse;width:100%}td,th{padding:12px;text-align:left;border:1px solid #aaa}h1{color:#17456b}</style><h1>EngineGuard: offline demo results</h1><p>Snapshot of local demo outputs, not live analysis. Independent audio, vibration and telemetry branches; fusion uses generated feature rows.</p><table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Example</th>
+      <th>Result</th>
+      <th>Evidence</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>liu_normal_training.csv</td>
+      <td>4 alerts / 580 available readings</td>
+      <td>LiU training excerpt; not independent validation</td>
+    </tr>
+    <tr>
+      <td>liu_pressure_fault_training.csv</td>
+      <td>579 alerts / 579 available readings</td>
+      <td>LiU training excerpt; not independent validation</td>
+    </tr>
+    <tr>
+      <td>Audio example</td>
+      <td>50.0% of windows differ</td>
+      <td>Synthetic input; saved idle-audio reference</td>
+    </tr>
+    <tr>
+      <td>Vibration matching</td>
+      <td>0 / 24 signatures outside range</td>
+      <td>Synthetic input and reference</td>
+    </tr>
+    <tr>
+      <td>Vibration changed</td>
+      <td>13 / 24 signatures outside range</td>
+      <td>Synthetic input and reference</td>
+    </tr>
+    <tr>
+      <td>Fusion: Nominal Operation</td>
+      <td>Nominal Operation</td>
+      <td>SVM prediction on a synthetic scenario; no real-engine diagnostic validation</td>
+    </tr>
+    <tr>
+      <td>Fusion: Mechanical Knocking</td>
+      <td>Mechanical Knocking</td>
+      <td>SVM prediction on a synthetic scenario; no real-engine diagnostic validation</td>
+    </tr>
+    <tr>
+      <td>Fusion: Valve Train Wear</td>
+      <td>Valve Train Wear</td>
+      <td>SVM prediction on a synthetic scenario; no real-engine diagnostic validation</td>
+    </tr>
+    <tr>
+      <td>Fusion: Engine Misfire</td>
+      <td>Engine Misfire</td>
+      <td>SVM prediction on a synthetic scenario; no real-engine diagnostic validation</td>
+    </tr>
+    <tr>
+      <td>Fusion: Turbocharger Stress</td>
+      <td>Turbocharger Stress</td>
+      <td>SVM prediction on a synthetic scenario; no real-engine diagnostic validation</td>
+    </tr>
+  </tbody>
+</table><p>Differences are observations, not diagnoses or fault-risk percentages. Historical telemetry benchmark results belong to the original frozen model. Synthetic SVM test agreement is not real-engine accuracy.</p>

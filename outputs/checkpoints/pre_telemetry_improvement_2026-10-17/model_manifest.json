@@ -1,0 +1,5 @@
+{
+  "model_sha256": "2625794998b73dde81cfd502b23bec932c0f565a56d1e55b6a248deadd4c28a3",
+  "provenance": "Locally rebuilt from LiU training data; not the frozen official-test artifact.",
+  "prepared_csv_sha256": "79a989510694883926a81569ab7aaff5c1510dd2747089af1e085ef82312bac0"
+}
